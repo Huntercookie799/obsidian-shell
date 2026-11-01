@@ -14,6 +14,8 @@ pub struct PtyStatusPayload {
 
 pub struct PtySession {
     pub id: String,
+    pub pid: Option<u32>,
+    pub initial_cwd: Option<String>,
     pub writer: Arc<Mutex<Box<dyn Write + Send>>>,
     pub master: Arc<Mutex<Box<dyn MasterPty + Send>>>,
     pub child: Arc<Mutex<Box<dyn Child + Send + Sync>>>,
@@ -25,6 +27,8 @@ pub struct PtySession {
 impl PtySession {
     pub fn new(
         id: String,
+        pid: Option<u32>,
+        initial_cwd: Option<String>,
         writer: Box<dyn Write + Send>,
         master: Box<dyn MasterPty + Send>,
         child: Box<dyn Child + Send + Sync>,
@@ -34,6 +38,8 @@ impl PtySession {
     ) -> Self {
         Self {
             id,
+            pid,
+            initial_cwd,
             writer: Arc::new(Mutex::new(writer)),
             master: Arc::new(Mutex::new(master)),
             child: Arc::new(Mutex::new(child)),

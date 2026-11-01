@@ -3,6 +3,7 @@ use std::io::Read;
 use std::sync::Arc;
 use parking_lot::Mutex;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use sysinfo::{Pid, ProcessesToUpdate, System};
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
@@ -66,6 +67,8 @@ impl PtyManager {
             .spawn_command(cmd)
             .map_err(|e| format!("Failed to spawn shell '{}': {}", chosen_shell, e))?;
 
+        let child_pid = child.process_id();
+
         drop(pair.slave);
 
         let writer = pair
@@ -81,6 +84,8 @@ impl PtyManager {
         let session_id = Uuid::new_v4().to_string();
         let session = PtySession::new(
             session_id.clone(),
+            child_pid,
+            effective_cwd.clone(),
             writer,
             pair.master,
             child,
@@ -159,6 +164,58 @@ impl PtyManager {
         } else {
             Err(format!("PTY session not found: {}", session_id))
         }
+    }
+
+    pub fn get_session_cwd(&self, session_id: &str) -> Option<String> {
+        let (pid, initial_cwd) = {
+            let sessions = self.sessions.lock();
+            let session = sessions.get(session_id)?;
+            (session.pid, session.initial_cwd.clone())
+        };
+
+        if let Some(pid_num) = pid {
+            let mut sys = System::new();
+            sys.refresh_processes(ProcessesToUpdate::All, true);
+
+            let target_pid = Pid::from_u32(pid_num);
+
+            // 1. Check if there are active child processes belonging to target_pid
+            let mut deepest_cwd: Option<String> = None;
+            for proc in sys.processes().values() {
+                if proc.parent() == Some(target_pid) {
+                    if let Some(cwd) = proc.cwd() {
+                        let path_str = cwd.to_string_lossy().to_string();
+                        if !path_str.is_empty() && std::path::Path::new(&path_str).exists() {
+                            deepest_cwd = Some(path_str);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if deepest_cwd.is_some() {
+                return deepest_cwd;
+            }
+
+            // 2. Check the shell process itself
+            if let Some(proc) = sys.process(target_pid) {
+                if let Some(cwd) = proc.cwd() {
+                    let path_str = cwd.to_string_lossy().to_string();
+                    if !path_str.is_empty() && std::path::Path::new(&path_str).exists() {
+                        return Some(path_str);
+                    }
+                }
+            }
+        }
+
+        // 3. Fallback to initial_cwd if valid
+        if let Some(ref cwd) = initial_cwd {
+            if std::path::Path::new(cwd).exists() {
+                return Some(cwd.clone());
+            }
+        }
+
+        None
     }
 
     pub fn kill_all(&self) {

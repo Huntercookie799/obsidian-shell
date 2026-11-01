@@ -2,14 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { isEnabled as isAutostartEnabled, enable as enableAutostart, disable as disableAutostart } from "@tauri-apps/plugin-autostart";
 import { createTerminalInstance, fitSafely, stripAnsi } from "./components/TerminalView";
-import { CollapsedWidgetType, CustomProfile, IslandMode, PtyStatus, SystemMetrics, TerminalPane, TerminalTab } from "./types";
+import { CollapsedWidgetType, CustomProfile, IslandMode, ObsidianSettings, PtyStatus, SessionSnapshot, SnapshotPane, SnapshotTab, SystemMetrics, TerminalPane, TerminalTab } from "./types";
 import { updateManager } from "./updater/UpdateManager";
-
-interface VayliSettings {
-  autoCollapseOnLeave: boolean;
-  collapsedWidget: CollapsedWidgetType;
-  clock24h: boolean;
-}
 
 class VayliIslandApp {
   private currentMode: IslandMode = "collapsed";
@@ -19,17 +13,20 @@ class VayliIslandApp {
   private tabCounter = 0;
   private paneCounter = 0;
 
-  // Timers for hover glance, activity tracking, auto-collapse, clock, and metrics
+  // Timers for hover glance, activity tracking, auto-collapse, clock, metrics and auto-save
   private hoverTimer: number | null = null;
   private leaveTimer: number | null = null;
   private autoCollapseTimer: number | null = null;
   private clockTimer: number | null = null;
   private metricsTimer: number | null = null;
+  private autoSaveTimer: number | null = null;
+  private isSavingSnapshot = false;
   private activityTimers: Map<string, number> = new Map();
 
   // Settings & Custom Profiles persisted in localStorage
-  private settings: VayliSettings = {
+  private settings: ObsidianSettings = {
     autoCollapseOnLeave: true,
+    restoreSessionOnStartup: true,
     collapsedWidget: "pty_status",
     clock24h: true,
   };
@@ -69,6 +66,7 @@ class VayliIslandApp {
   private settingsPopover!: HTMLElement;
   private toggleAutoCollapse!: HTMLInputElement;
   private toggleAutostart!: HTMLInputElement;
+  private toggleRestoreSession!: HTMLInputElement;
   private selectCollapsedWidget!: HTMLSelectElement;
   private settingClockRow!: HTMLElement;
   private toggleClock24h!: HTMLInputElement;
@@ -96,7 +94,7 @@ class VayliIslandApp {
 
   public async init() {
     this.cacheDom();
-    this.loadSettings();
+    await this.loadSettings();
     this.loadCustomProfiles();
     this.bindEvents();
     this.listenToBackendState();
@@ -104,8 +102,16 @@ class VayliIslandApp {
     // Initialize Auto-Updater & Version Manager
     await this.initUpdater();
 
-    // Spawn initial default terminal session
-    await this.createTab();
+    // Check if session restoration is enabled and attempt restoring snapshot
+    let restored = false;
+    if (this.settings.restoreSessionOnStartup) {
+      restored = await this.restoreSession();
+    }
+
+    // Spawn initial default terminal session if not restored
+    if (!restored) {
+      await this.createTab();
+    }
 
     // Set initial collapsed geometry
     await this.setMode("collapsed");
@@ -147,6 +153,7 @@ class VayliIslandApp {
     this.settingsPopover = document.getElementById("settings-popover")!;
     this.toggleAutoCollapse = document.getElementById("toggle-auto-collapse") as HTMLInputElement;
     this.toggleAutostart = document.getElementById("toggle-autostart") as HTMLInputElement;
+    this.toggleRestoreSession = document.getElementById("toggle-restore-session") as HTMLInputElement;
     this.selectCollapsedWidget = document.getElementById("select-collapsed-widget") as HTMLSelectElement;
     this.settingClockRow = document.getElementById("setting-clock-row")!;
     this.toggleClock24h = document.getElementById("toggle-clock-24h") as HTMLInputElement;
@@ -176,7 +183,7 @@ class VayliIslandApp {
 
   private async loadSettings() {
     try {
-      const raw = localStorage.getItem("vayli_settings");
+      const raw = localStorage.getItem("obsidian_settings") || localStorage.getItem("vayli_settings");
       if (raw) {
         this.settings = { ...this.settings, ...JSON.parse(raw) };
       }
@@ -185,6 +192,9 @@ class VayliIslandApp {
     }
     if (this.toggleAutoCollapse) {
       this.toggleAutoCollapse.checked = this.settings.autoCollapseOnLeave;
+    }
+    if (this.toggleRestoreSession) {
+      this.toggleRestoreSession.checked = this.settings.restoreSessionOnStartup;
     }
     if (this.selectCollapsedWidget) {
       this.selectCollapsedWidget.value = this.settings.collapsedWidget;
@@ -207,7 +217,7 @@ class VayliIslandApp {
 
   private saveSettings() {
     try {
-      localStorage.setItem("vayli_settings", JSON.stringify(this.settings));
+      localStorage.setItem("obsidian_settings", JSON.stringify(this.settings));
     } catch (e) {
       console.warn("Failed to persist settings in localStorage:", e);
     }
@@ -598,6 +608,39 @@ class VayliIslandApp {
       }
     });
 
+    this.toggleRestoreSession.addEventListener("change", async () => {
+      this.settings.restoreSessionOnStartup = this.toggleRestoreSession.checked;
+      this.saveSettings();
+      if (!this.settings.restoreSessionOnStartup) {
+        try {
+          await invoke("clear_session_snapshot");
+        } catch (e) {
+          console.debug("Error al limpiar instantánea de sesión:", e);
+        }
+      } else {
+        this.scheduleAutoSave();
+      }
+    });
+
+    // Escuchar solicitud de salida del System Tray
+    listen("tray-quit-requested", async () => {
+      if (this.settings.restoreSessionOnStartup) {
+        await this.saveSessionSnapshot();
+      }
+      try {
+        await invoke("quit_app_immediately");
+      } catch (err) {
+        console.error("Error al salir inmediatamente:", err);
+      }
+    });
+
+    // Guardado de emergencia en evento beforeunload de la ventana
+    window.addEventListener("beforeunload", () => {
+      if (this.settings.restoreSessionOnStartup) {
+        this.saveSessionSnapshot();
+      }
+    });
+
     document.addEventListener("click", () => {
       this.shellMenuPopover.classList.add("hidden");
       this.settingsPopover.classList.add("hidden");
@@ -787,11 +830,18 @@ class VayliIslandApp {
     this.renderTabsList();
     this.switchTab(tabId);
     this.updatePillSummary();
+    this.scheduleAutoSave();
 
     return tabId;
   }
 
-  private async addPaneToTab(tab: TerminalTab, shellPath?: string, cwd?: string): Promise<TerminalPane> {
+  private async addPaneToTab(
+    tab: TerminalTab,
+    shellPath?: string,
+    cwd?: string,
+    initialBuffer?: string,
+    overrideProcessName?: string
+  ): Promise<TerminalPane> {
     this.paneCounter += 1;
     const paneId = `pane-${this.paneCounter}`;
 
@@ -805,29 +855,38 @@ class VayliIslandApp {
       rows,
     });
 
-    const shellDisplay = shellPath
+    const shellDisplay = overrideProcessName || (shellPath
       ? shellPath.split(/[/\\]/).pop() || shellPath
       : navigator.platform.includes("Win")
         ? "powershell"
-        : "bash";
+        : "bash");
 
     const paneEl = document.createElement("div");
     paneEl.className = "terminal-pane active-pane";
     paneEl.id = paneId;
     tab.containerElement.appendChild(paneEl);
 
-    const { terminal, fitAddon, searchAddon, mount } = createTerminalInstance(sessionId);
+    const { terminal, fitAddon, searchAddon, serializeAddon, serializeBuffer, mount } =
+      createTerminalInstance(sessionId);
     mount(paneEl);
+
+    if (initialBuffer && initialBuffer.length > 0) {
+      terminal.write(initialBuffer);
+      terminal.write("\r\n\x1b[90m── Sesión restaurada ──\x1b[0m\r\n");
+    }
 
     const pane: TerminalPane = {
       id: paneId,
       sessionId,
       processName: shellDisplay,
+      shellPath,
       status: "idle",
-      lastSnippet: "Terminal lista",
+      lastSnippet: initialBuffer ? "Sesión restaurada" : "Terminal lista",
       terminal,
       fitAddon,
       searchAddon,
+      serializeAddon,
+      serializeBuffer,
       element: paneEl,
     };
 
@@ -881,15 +940,18 @@ class VayliIslandApp {
       }, 1500);
 
       this.activityTimers.set(sessionId, newTimer);
+      this.scheduleAutoSave();
     });
 
     const statusUnlisten = await listen<PtyStatus>(`pty-status-${sessionId}`, (event) => {
       const exitCode = event.payload.exitCode;
       const status = exitCode === null || exitCode === 0 ? "done" : "error";
       this.updatePaneStatus(tab, pane, status);
+      this.scheduleAutoSave();
     });
 
     this.unlisteners.set(sessionId, [outputUnlisten, statusUnlisten]);
+    this.scheduleAutoSave();
 
     return pane;
   }
@@ -911,6 +973,7 @@ class VayliIslandApp {
 
     this.fitActiveTabPanes();
     this.updatePillSummary();
+    this.scheduleAutoSave();
   }
 
   public navigateSplitPane() {
@@ -977,6 +1040,7 @@ class VayliIslandApp {
 
     this.renderTabsList();
     this.updatePillSummary();
+    this.scheduleAutoSave();
 
     if (this.currentMode === "expanded") {
       this.fitActiveTabPanes();
@@ -1035,6 +1099,7 @@ class VayliIslandApp {
     }
     this.renderTabsList();
     this.updatePillSummary();
+    this.scheduleAutoSave();
   }
 
   public async closeTab(tabId: string) {
@@ -1074,6 +1139,148 @@ class VayliIslandApp {
 
     this.renderTabsList();
     this.updatePillSummary();
+    this.scheduleAutoSave();
+  }
+
+  public scheduleAutoSave() {
+    if (!this.settings.restoreSessionOnStartup) return;
+    if (this.autoSaveTimer) {
+      clearTimeout(this.autoSaveTimer);
+    }
+    this.autoSaveTimer = window.setTimeout(() => {
+      this.saveSessionSnapshot().catch((err) => {
+        console.debug("[Snapshot] Auto-guardado diferido:", err);
+      });
+    }, 3000);
+  }
+
+  public async saveSessionSnapshot(): Promise<void> {
+    if (!this.settings.restoreSessionOnStartup) return;
+    if (this.isSavingSnapshot) return;
+    this.isSavingSnapshot = true;
+
+    try {
+      const snapshotTabs: SnapshotTab[] = [];
+
+      for (const [_, tab] of this.tabs.entries()) {
+        const snapshotPanes: SnapshotPane[] = [];
+
+        for (const pane of tab.panes) {
+          let cwd: string | undefined;
+          try {
+            const queriedCwd = await invoke<string | null>("get_session_cwd", {
+              sessionId: pane.sessionId,
+            });
+            if (queriedCwd) {
+              cwd = queriedCwd;
+            }
+          } catch (e) {
+            console.debug(`[Snapshot] Error al consultar CWD de sesión ${pane.sessionId}:`, e);
+          }
+
+          const serializedBuffer = pane.serializeBuffer ? pane.serializeBuffer(500) : "";
+
+          snapshotPanes.push({
+            id: pane.id,
+            shellPath: pane.shellPath,
+            processName: pane.processName,
+            cwd,
+            serializedBuffer,
+          });
+        }
+
+        snapshotTabs.push({
+          id: tab.id,
+          title: tab.title,
+          layout: tab.layout,
+          activePaneId: tab.activePaneId,
+          panes: snapshotPanes,
+        });
+      }
+
+      if (snapshotTabs.length === 0) {
+        return;
+      }
+
+      const snapshot: SessionSnapshot = {
+        version: 1,
+        timestamp: Date.now(),
+        activeTabId: this.activeTabId || snapshotTabs[0].id,
+        tabs: snapshotTabs,
+      };
+
+      await invoke("save_session_snapshot", {
+        payload: JSON.stringify(snapshot),
+      });
+    } catch (err) {
+      console.error("[Snapshot] Error al guardar la instantánea de sesión:", err);
+    } finally {
+      this.isSavingSnapshot = false;
+    }
+  }
+
+  public async restoreSession(): Promise<boolean> {
+    try {
+      const rawSnapshot = await invoke<string | null>("load_session_snapshot");
+      if (!rawSnapshot) return false;
+
+      const snapshot: SessionSnapshot = JSON.parse(rawSnapshot);
+      if (!snapshot.tabs || snapshot.tabs.length === 0) return false;
+
+      for (const savedTab of snapshot.tabs) {
+        this.tabCounter += 1;
+        const tabIndex = this.tabCounter;
+        const tabId = `tab-${tabIndex}`;
+
+        const containerEl = document.createElement("div");
+        const layout = savedTab.layout || "single";
+        containerEl.className = `tab-panes-container layout-${layout}`;
+        containerEl.id = `container-${tabId}`;
+        this.viewportEl.appendChild(containerEl);
+
+        const tab: TerminalTab = {
+          id: tabId,
+          title: savedTab.title || `${tabIndex}: terminal`,
+          layout,
+          panes: [],
+          activePaneId: "",
+          containerElement: containerEl,
+        };
+
+        this.tabs.set(tabId, tab);
+
+        for (const savedPane of savedTab.panes) {
+          await this.addPaneToTab(
+            tab,
+            savedPane.shellPath,
+            savedPane.cwd,
+            savedPane.serializedBuffer,
+            savedPane.processName
+          );
+        }
+
+        if (tab.panes.length > 0) {
+          const activeIndex = savedTab.panes.findIndex((p) => p.id === savedTab.activePaneId);
+          const targetPane = activeIndex >= 0 ? tab.panes[activeIndex] : tab.panes[0];
+          this.setActivePaneInTab(tab, targetPane.id);
+        }
+      }
+
+      this.renderTabsList();
+
+      const targetTabId = snapshot.activeTabId && this.tabs.has(snapshot.activeTabId)
+        ? snapshot.activeTabId
+        : this.tabs.keys().next().value;
+
+      if (targetTabId) {
+        this.switchTab(targetTabId);
+      }
+      this.updatePillSummary();
+      return true;
+    } catch (err) {
+      console.error("[Restauración] Error al restaurar sesión previa:", err);
+      return false;
+    }
   }
 
   private updatePaneStatus(tab: TerminalTab, pane: TerminalPane, status: "idle" | "running" | "done" | "error") {

@@ -3,6 +3,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { SearchAddon } from "@xterm/addon-search";
+import { SerializeAddon } from "@xterm/addon-serialize";
 import { invoke } from "@tauri-apps/api/core";
 import "@xterm/xterm/css/xterm.css";
 
@@ -68,6 +69,8 @@ export function createTerminalInstance(sessionId: string): {
   terminal: Terminal;
   fitAddon: FitAddon;
   searchAddon: SearchAddon;
+  serializeAddon: SerializeAddon;
+  serializeBuffer: (maxLines?: number) => string;
   mount: (container: HTMLElement) => void;
   dispose: () => void;
 } {
@@ -85,9 +88,20 @@ export function createTerminalInstance(sessionId: string): {
 
   const fitAddon = new FitAddon();
   const searchAddon = new SearchAddon();
+  const serializeAddon = new SerializeAddon();
   terminal.loadAddon(fitAddon);
   terminal.loadAddon(searchAddon);
+  terminal.loadAddon(serializeAddon);
   terminal.loadAddon(new WebLinksAddon());
+
+  const serializeBuffer = (maxLines: number = 500): string => {
+    try {
+      return serializeAddon.serialize({ scrollback: maxLines });
+    } catch (e) {
+      console.warn(`[PTY ${sessionId}] Error al serializar buffer:`, e);
+      return "";
+    }
+  };
 
   // Input listener from user keystrokes -> Rust PTY
   terminal.onData((data) => {
@@ -154,5 +168,5 @@ export function createTerminalInstance(sessionId: string): {
     }
   };
 
-  return { terminal, fitAddon, searchAddon, mount, dispose };
+  return { terminal, fitAddon, searchAddon, serializeAddon, serializeBuffer, mount, dispose };
 }

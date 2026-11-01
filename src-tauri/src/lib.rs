@@ -88,6 +88,59 @@ fn kill_pty_session(
 }
 
 #[tauri::command]
+fn get_session_cwd(
+    manager: State<PtyManager>,
+    session_id: String,
+) -> Option<String> {
+    manager.get_session_cwd(&session_id)
+}
+
+#[tauri::command]
+fn save_session_snapshot(app: AppHandle, payload: String) -> Result<(), String> {
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&data_dir).map_err(|e| format!("Failed to create app data dir: {}", e))?;
+    let target_file = data_dir.join("session-snapshot.json");
+    let tmp_file = data_dir.join("session-snapshot.json.tmp");
+    std::fs::write(&tmp_file, payload.as_bytes()).map_err(|e| format!("Failed to write tmp snapshot: {}", e))?;
+    std::fs::rename(&tmp_file, &target_file).map_err(|e| format!("Failed to persist snapshot atomically: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn load_session_snapshot(app: AppHandle) -> Result<Option<String>, String> {
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let target_file = data_dir.join("session-snapshot.json");
+    if !target_file.exists() {
+        return Ok(None);
+    }
+    let content = std::fs::read_to_string(&target_file).map_err(|e| format!("Failed to read snapshot: {}", e))?;
+    if content.trim().is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(content))
+}
+
+#[tauri::command]
+fn clear_session_snapshot(app: AppHandle) -> Result<(), String> {
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let target_file = data_dir.join("session-snapshot.json");
+    if target_file.exists() {
+        let _ = std::fs::remove_file(&target_file);
+    }
+    let tmp_file = data_dir.join("session-snapshot.json.tmp");
+    if tmp_file.exists() {
+        let _ = std::fs::remove_file(&tmp_file);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn quit_app_immediately(app: AppHandle, pty_manager: State<PtyManager>) {
+    pty_manager.kill_all();
+    app.exit(0);
+}
+
+#[tauri::command]
 fn set_island_state(
     window: WebviewWindow,
     state_holder: State<IslandStateHolder>,
@@ -240,9 +293,20 @@ pub fn run() {
                             }
                         }
                         "quit" => {
-                            let pty_manager = app.state::<PtyManager>();
-                            pty_manager.kill_all();
-                            app.exit(0);
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.emit("tray-quit-requested", ());
+                                let app_clone = app.clone();
+                                std::thread::spawn(move || {
+                                    std::thread::sleep(std::time::Duration::from_millis(1200));
+                                    let pty_manager = app_clone.state::<PtyManager>();
+                                    pty_manager.kill_all();
+                                    app_clone.exit(0);
+                                });
+                            } else {
+                                let pty_manager = app.state::<PtyManager>();
+                                pty_manager.kill_all();
+                                app.exit(0);
+                            }
                         }
                         _ => {}
                     }
@@ -284,6 +348,11 @@ pub fn run() {
             write_to_pty,
             resize_pty,
             kill_pty_session,
+            get_session_cwd,
+            save_session_snapshot,
+            load_session_snapshot,
+            clear_session_snapshot,
+            quit_app_immediately,
             set_island_state,
             get_island_state,
             switch_to_next_monitor,
