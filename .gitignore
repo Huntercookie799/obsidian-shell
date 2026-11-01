@@ -23,6 +23,9 @@ yarn-error.log*
 .agents/
 AGENTS.md
 
+# Scripts locales privados
+.scripts/
+
 # Operating System Files
 .DS_Store
 Thumbs.db
