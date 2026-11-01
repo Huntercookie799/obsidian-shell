@@ -308,7 +308,7 @@ class VayliIslandApp {
     if (this.customProfiles.length === 0) {
       const emptyMsg = document.createElement("div");
       emptyMsg.style.cssText = "font-size: 10px; color: #52525B; padding: 4px;";
-      emptyMsg.textContent = "No saved profiles yet.";
+      emptyMsg.textContent = "No hay perfiles guardados.";
       this.customProfilesContainer.appendChild(emptyMsg);
       return;
     }
@@ -824,7 +824,7 @@ class VayliIslandApp {
       sessionId,
       processName: shellDisplay,
       status: "idle",
-      lastSnippet: "Terminal ready",
+      lastSnippet: "Terminal lista",
       terminal,
       fitAddon,
       searchAddon,
@@ -1105,7 +1105,7 @@ class VayliIslandApp {
       const activeTab = this.tabs.get(this.activeTabId!);
       this.currentProcessEl.textContent = activePane.processName;
       this.glanceTitle.textContent = activeTab?.title || activePane.processName;
-      this.glanceSnippet.textContent = activePane.lastSnippet || "Ready";
+      this.glanceSnippet.textContent = activePane.lastSnippet || "Lista";
       this.glanceStatusTag.textContent = activePane.status.toUpperCase();
       this.glanceStatusTag.className = `glance-status-tag ${activePane.status}`;
       this.updateRimLight(activePane.status);
@@ -1114,7 +1114,7 @@ class VayliIslandApp {
       if (this.pillLogProcEl && this.pillLogSnippetEl) {
         const shortProc = activePane.processName.replace(/\.exe$/i, "").slice(0, 10);
         this.pillLogProcEl.textContent = `${shortProc}:`;
-        this.pillLogSnippetEl.textContent = activePane.lastSnippet || "Ready";
+        this.pillLogSnippetEl.textContent = activePane.lastSnippet || "Lista";
       }
     }
   }
@@ -1140,7 +1140,7 @@ class VayliIslandApp {
       const closeBtn = document.createElement("button");
       closeBtn.className = "tab-close-btn";
       closeBtn.innerHTML = "&times;";
-      closeBtn.title = "Close Tab (Ctrl+W)";
+      closeBtn.title = "Cerrar pestaña (Ctrl+W)";
       closeBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         this.closeTab(tab.id);
