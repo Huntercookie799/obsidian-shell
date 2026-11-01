@@ -204,6 +204,21 @@ fn center_island(
     update_island_geometry(&window, state)
 }
 
+#[tauri::command]
+fn get_available_monitors(window: WebviewWindow) -> Result<Vec<window::MonitorInfo>, String> {
+    window::get_available_monitors_list(&window)
+}
+
+#[tauri::command]
+fn set_active_monitor(
+    window: WebviewWindow,
+    state_holder: State<IslandStateHolder>,
+    monitor_index: usize,
+) -> Result<usize, String> {
+    let state = *state_holder.0.lock();
+    window::set_active_monitor_by_index(&window, state, monitor_index)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let pty_manager = PtyManager::new();
@@ -392,7 +407,9 @@ pub fn run() {
             check_fullscreen_occlusion,
             switch_to_next_monitor,
             center_island,
-            get_system_metrics
+            get_system_metrics,
+            get_available_monitors,
+            set_active_monitor
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

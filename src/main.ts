@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { isEnabled as isAutostartEnabled, enable as enableAutostart, disable as disableAutostart } from "@tauri-apps/plugin-autostart";
 import { createTerminalInstance, fitSafely, hexToRgb, setInitialDimensions, stripAnsi, updateTerminalAccentTheme } from "./components/TerminalView";
-import { CollapsedWidgetType, CustomProfile, IslandMode, ObsidianSettings, PtyStatus, SessionSnapshot, SnapshotPane, SnapshotTab, SystemMetrics, TerminalPane, TerminalTab } from "./types";
+import { CollapsedWidgetType, CustomProfile, IslandMode, MonitorInfo, ObsidianSettings, PtyStatus, SessionSnapshot, SnapshotPane, SnapshotTab, SystemMetrics, TerminalPane, TerminalTab } from "./types";
 import { updateManager } from "./updater/UpdateManager";
 
 class VayliIslandApp {
@@ -72,6 +72,7 @@ class VayliIslandApp {
   private toggleAutostart!: HTMLInputElement;
   private toggleRestoreSession!: HTMLInputElement;
   private toggleShowOverFullscreen!: HTMLInputElement;
+  private selectActiveMonitor!: HTMLSelectElement;
   private inputAccentPicker!: HTMLInputElement;
   private selectCollapsedWidget!: HTMLSelectElement;
   private settingClockRow!: HTMLElement;
@@ -164,6 +165,7 @@ class VayliIslandApp {
     this.toggleAutostart = document.getElementById("toggle-autostart") as HTMLInputElement;
     this.toggleRestoreSession = document.getElementById("toggle-restore-session") as HTMLInputElement;
     this.toggleShowOverFullscreen = document.getElementById("toggle-show-over-fullscreen") as HTMLInputElement;
+    this.selectActiveMonitor = document.getElementById("select-active-monitor") as HTMLSelectElement;
     this.inputAccentPicker = document.getElementById("input-accent-picker") as HTMLInputElement;
     this.selectCollapsedWidget = document.getElementById("select-collapsed-widget") as HTMLSelectElement;
     this.settingClockRow = document.getElementById("setting-clock-row")!;
@@ -235,6 +237,49 @@ class VayliIslandApp {
     this.applyAccentColor(this.settings.accentColor || "#FF6B00");
 
     this.applyCollapsedWidget();
+
+    // Sincronizar monitor preferido guardado
+    if (this.settings.targetMonitorIndex !== undefined) {
+      try {
+        await invoke("set_active_monitor", { monitorIndex: this.settings.targetMonitorIndex });
+      } catch (err) {
+        console.debug("Error al ubicar notch en pantalla guardada:", err);
+      }
+    }
+    await this.refreshMonitorsList();
+  }
+
+  private async refreshMonitorsList() {
+    if (!this.selectActiveMonitor) return;
+    try {
+      const monitors = await invoke<MonitorInfo[]>("get_available_monitors");
+      this.selectActiveMonitor.innerHTML = "";
+
+      if (!monitors || monitors.length === 0) {
+        const opt = document.createElement("option");
+        opt.value = "0";
+        opt.textContent = "Pantalla principal";
+        this.selectActiveMonitor.appendChild(opt);
+        return;
+      }
+
+      monitors.forEach((m) => {
+        const opt = document.createElement("option");
+        opt.value = m.index.toString();
+        const primaryTag = m.is_primary ? " (Principal)" : "";
+        opt.textContent = `Pantalla ${m.index + 1}: ${m.width}x${m.height}${primaryTag}`;
+        if (m.is_current) {
+          opt.selected = true;
+        }
+        this.selectActiveMonitor.appendChild(opt);
+      });
+
+      if (this.settings.targetMonitorIndex !== undefined && this.settings.targetMonitorIndex < monitors.length) {
+        this.selectActiveMonitor.value = this.settings.targetMonitorIndex.toString();
+      }
+    } catch (err) {
+      console.debug("Error al cargar lista de pantallas disponibles:", err);
+    }
   }
 
   private saveSettings() {
@@ -610,6 +655,9 @@ class VayliIslandApp {
       e.stopPropagation();
       this.shellMenuPopover.classList.add("hidden");
       this.settingsPopover.classList.toggle("hidden");
+      if (!this.settingsPopover.classList.contains("hidden")) {
+        this.refreshMonitorsList();
+      }
     });
 
     this.settingsPopover.addEventListener("click", (e) => {
@@ -700,6 +748,31 @@ class VayliIslandApp {
         }
       });
     }
+
+    if (this.selectActiveMonitor) {
+      this.selectActiveMonitor.addEventListener("change", async () => {
+        const selectedIdx = parseInt(this.selectActiveMonitor.value, 10);
+        if (!isNaN(selectedIdx)) {
+          try {
+            const appliedIdx = await invoke<number>("set_active_monitor", { monitorIndex: selectedIdx });
+            this.settings.targetMonitorIndex = appliedIdx;
+            this.saveSettings();
+          } catch (err) {
+            console.error("Error al cambiar pantalla activa:", err);
+          }
+        }
+      });
+    }
+
+    // Escuchar cambio de monitor desde el System Tray o Backend
+    listen<number>("monitor-changed", (event) => {
+      const newIdx = event.payload;
+      this.settings.targetMonitorIndex = newIdx;
+      this.saveSettings();
+      if (this.selectActiveMonitor) {
+        this.selectActiveMonitor.value = newIdx.toString();
+      }
+    });
 
     // Escuchar solicitud de salida del System Tray
     listen("tray-quit-requested", async () => {

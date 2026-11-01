@@ -931,7 +931,10 @@ html, body {
   position: absolute;
   top: 44px;
   right: 12px;
-  width: 270px;
+  width: 280px;
+  max-height: 420px;
+  overflow-y: auto;
+  box-sizing: border-box;
   background: #111115;
   border: 1px solid #282832;
   border-radius: 10px;
@@ -942,6 +945,8 @@ html, body {
   flex-direction: column;
   gap: 12px;
   animation: fadeIn 150ms ease;
+  scrollbar-width: thin;
+  scrollbar-color: #27272E transparent;
 }
 
 .settings-popover.hidden {

@@ -7,6 +7,16 @@ export type IslandMode = "collapsed" | "glance" | "expanded";
 export type SplitLayout = "single" | "split-vertical" | "split-horizontal";
 export type CollapsedWidgetType = "pty_status" | "clock" | "system_metrics" | "live_log";
 
+export interface MonitorInfo {
+  index: number;
+  name: string;
+  width: number;
+  height: number;
+  scale_factor: number;
+  is_primary: boolean;
+  is_current: boolean;
+}
+
 export interface ObsidianSettings {
   autoCollapseOnLeave: boolean;
   restoreSessionOnStartup: boolean;
@@ -14,6 +24,7 @@ export interface ObsidianSettings {
   collapsedWidget: CollapsedWidgetType;
   clock24h: boolean;
   accentColor: string;
+  targetMonitorIndex?: number;
 }
 
 export interface SystemMetrics {

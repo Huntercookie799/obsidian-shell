@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use tauri::{PhysicalPosition, PhysicalSize, WebviewWindow};
+use tauri::{Emitter, PhysicalPosition, PhysicalSize, WebviewWindow};
 
 static CURRENT_MONITOR_INDEX: AtomicUsize = AtomicUsize::new(0);
 pub static SHOW_OVER_FULLSCREEN: AtomicBool = AtomicBool::new(false);
@@ -77,6 +77,82 @@ pub fn update_island_geometry(window: &WebviewWindow, state: IslandState) -> Res
     update_island_geometry_on_monitor(window, state, None)
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MonitorInfo {
+    pub index: usize,
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub scale_factor: f64,
+    pub is_primary: bool,
+    pub is_current: bool,
+}
+
+pub fn get_available_monitors_list(window: &WebviewWindow) -> Result<Vec<MonitorInfo>, String> {
+    let monitors = window
+        .available_monitors()
+        .map_err(|e| format!("Error al obtener monitores disponibles: {}", e))?;
+
+    if monitors.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let primary_opt = window.primary_monitor().ok().flatten();
+    let current_idx = CURRENT_MONITOR_INDEX.load(Ordering::SeqCst) % monitors.len();
+
+    let list = monitors
+        .iter()
+        .enumerate()
+        .map(|(idx, m)| {
+            let size = m.size();
+            let pos = m.position();
+            let is_primary = if let Some(ref p) = primary_opt {
+                p.position() == pos && p.size() == size
+            } else {
+                pos.x == 0 && pos.y == 0
+            };
+            let is_current = idx == current_idx;
+            let raw_name = m.name().map(|s| s.to_string()).unwrap_or_default();
+            let display_name = if raw_name.is_empty() {
+                format!("Pantalla {}", idx + 1)
+            } else {
+                raw_name
+            };
+
+            MonitorInfo {
+                index: idx,
+                name: display_name,
+                width: size.width,
+                height: size.height,
+                scale_factor: m.scale_factor(),
+                is_primary,
+                is_current,
+            }
+        })
+        .collect();
+
+    Ok(list)
+}
+
+pub fn set_active_monitor_by_index(
+    window: &WebviewWindow,
+    state: IslandState,
+    monitor_idx: usize,
+) -> Result<usize, String> {
+    let monitors = window
+        .available_monitors()
+        .map_err(|e| format!("Error al obtener monitores disponibles: {}", e))?;
+
+    if monitors.is_empty() {
+        return Err("No hay monitores disponibles".to_string());
+    }
+
+    let target_idx = monitor_idx % monitors.len();
+    update_island_geometry_on_monitor(window, state, Some(target_idx))?;
+    let _ = window.emit("monitor-changed", target_idx);
+    Ok(target_idx)
+}
+
 pub fn switch_monitor(window: &WebviewWindow, state: IslandState) -> Result<usize, String> {
     let monitors = window
         .available_monitors()
@@ -89,6 +165,7 @@ pub fn switch_monitor(window: &WebviewWindow, state: IslandState) -> Result<usiz
     let current = CURRENT_MONITOR_INDEX.load(Ordering::SeqCst);
     let next = (current + 1) % monitors.len();
     update_island_geometry_on_monitor(window, state, Some(next))?;
+    let _ = window.emit("monitor-changed", next);
     Ok(next)
 }
 
