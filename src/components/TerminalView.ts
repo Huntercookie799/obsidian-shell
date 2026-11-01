@@ -106,6 +106,7 @@ export function createTerminalInstance(sessionId: string, initialAccent: string 
   searchAddon: SearchAddon;
   serializeAddon: SerializeAddon;
   serializeBuffer: (maxLines?: number) => string;
+  smartPaste: (rawText: string) => void;
   mount: (container: HTMLElement) => void;
   dispose: () => void;
 } {
@@ -146,6 +147,29 @@ export function createTerminalInstance(sessionId: string, initialAccent: string 
     }
   };
 
+  // Pegado Inteligente Multi-Línea con soporte forzado de Bracketed Paste
+  const smartPaste = (rawText: string) => {
+    if (!rawText || rawText.length === 0) return;
+
+    // Normalizar saltos de línea Windows \r\n -> \n, \r -> \n
+    const normalized = rawText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const hasNewlines = normalized.includes("\n");
+    const isBracketed = Boolean((terminal.modes as any)?.bracketedPasteMode) || hasNewlines;
+
+    let payload: string;
+    if (isBracketed) {
+      // Sustituir \n por \r dentro de la secuencia bracketed para el modo raw del PTY
+      const bracketedContent = normalized.replace(/\n/g, "\r");
+      payload = `\x1b[200~${bracketedContent}\x1b[201~`;
+    } else {
+      payload = normalized;
+    }
+
+    invoke("write_to_pty", { sessionId, data: payload }).catch((err) => {
+      console.error(`[PTY ${sessionId}] Error al pegar texto en PTY:`, err);
+    });
+  };
+
   // Input listener from user keystrokes -> Rust PTY
   terminal.onData((data) => {
     invoke("write_to_pty", { sessionId, data }).catch((err) => {
@@ -157,35 +181,82 @@ export function createTerminalInstance(sessionId: string, initialAccent: string 
   terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
     // Intercept Ctrl+Shift+C (Copy)
     if (event.ctrlKey && event.shiftKey && event.code === "KeyC") {
-      const selection = terminal.getSelection();
-      if (selection) {
-        navigator.clipboard.writeText(selection);
+      if (event.type === "keydown") {
+        const selection = terminal.getSelection();
+        if (selection) {
+          navigator.clipboard.writeText(selection).catch(() => {});
+        }
       }
       return false;
     }
 
-    // Intercept Ctrl+Shift+V (Paste)
-    if (event.ctrlKey && event.shiftKey && event.code === "KeyV") {
-      navigator.clipboard.readText().then((text) => {
-        if (text) {
-          invoke("write_to_pty", { sessionId, data: text });
-        }
-      });
+    // Intercept Ctrl+V or Ctrl+Shift+V (Smart Paste)
+    if (event.ctrlKey && event.code === "KeyV") {
+      if (event.type === "keydown") {
+        navigator.clipboard.readText().then((text) => {
+          if (text) {
+            smartPaste(text);
+          }
+        }).catch((err) => {
+          console.debug(`[PTY ${sessionId}] Error leyendo portapapeles:`, err);
+        });
+      }
       return false;
     }
 
     // Intercept Ctrl+W and Ctrl+Shift+W to close active pane/tab instead of terminal ETB
     if (event.ctrlKey && event.code === "KeyW") {
-      event.preventDefault();
-      window.dispatchEvent(new CustomEvent("vayli:close-active-pane"));
+      if (event.type === "keydown") {
+        event.preventDefault();
+        window.dispatchEvent(new CustomEvent("vayli:close-active-pane"));
+      }
       return false;
     }
 
     return true;
   });
 
+  let contextMenuHandler: ((e: MouseEvent) => void) | null = null;
+  let pasteHandler: ((e: ClipboardEvent) => void) | null = null;
+  let targetContainer: HTMLElement | null = null;
+
   const mount = (container: HTMLElement) => {
+    targetContainer = container;
     terminal.open(container);
+
+    // Clic derecho estilo Windows Terminal:
+    // Si hay selección -> copiar y limpiar selección
+    // Si no hay selección -> pegar inteligentemente
+    contextMenuHandler = (e: MouseEvent) => {
+      e.preventDefault();
+      if (terminal.hasSelection()) {
+        const selected = terminal.getSelection();
+        if (selected) {
+          navigator.clipboard.writeText(selected).catch(() => {});
+        }
+        terminal.clearSelection();
+      } else {
+        navigator.clipboard.readText().then((text) => {
+          if (text) {
+            smartPaste(text);
+          }
+        }).catch((err) => {
+          console.debug(`[PTY ${sessionId}] Error leyendo portapapeles en clic derecho:`, err);
+        });
+      }
+    };
+    container.addEventListener("contextmenu", contextMenuHandler);
+
+    // Interceptar evento paste nativo del DOM para unificar con smartPaste
+    pasteHandler = (e: ClipboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const pastedText = e.clipboardData?.getData("text");
+      if (pastedText) {
+        smartPaste(pastedText);
+      }
+    };
+    container.addEventListener("paste", pasteHandler);
 
     // Try WebGL acceleration with graceful Canvas/DOM fallback
     try {
@@ -204,6 +275,14 @@ export function createTerminalInstance(sessionId: string, initialAccent: string 
   };
 
   const dispose = () => {
+    if (targetContainer) {
+      if (contextMenuHandler) {
+        targetContainer.removeEventListener("contextmenu", contextMenuHandler);
+      }
+      if (pasteHandler) {
+        targetContainer.removeEventListener("paste", pasteHandler);
+      }
+    }
     try {
       terminal.dispose();
     } catch (e) {
@@ -211,5 +290,5 @@ export function createTerminalInstance(sessionId: string, initialAccent: string 
     }
   };
 
-  return { terminal, fitAddon, searchAddon, serializeAddon, serializeBuffer, mount, dispose };
+  return { terminal, fitAddon, searchAddon, serializeAddon, serializeBuffer, smartPaste, mount, dispose };
 }

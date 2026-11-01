@@ -924,7 +924,7 @@ class VayliIslandApp {
     paneEl.id = paneId;
     tab.containerElement.appendChild(paneEl);
 
-    const { terminal, fitAddon, searchAddon, serializeAddon, serializeBuffer, mount } =
+    const { terminal, fitAddon, searchAddon, serializeAddon, serializeBuffer, smartPaste, mount } =
       createTerminalInstance(sessionId, this.settings.accentColor);
     mount(paneEl);
 
@@ -945,6 +945,7 @@ class VayliIslandApp {
       searchAddon,
       serializeAddon,
       serializeBuffer,
+      smartPaste,
       element: paneEl,
     };
 
