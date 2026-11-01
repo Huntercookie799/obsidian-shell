@@ -241,16 +241,15 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
   const smartPaste = (rawText: string) => {
     if (!rawText || rawText.length === 0 || !currentSessionId) return;
 
-    // Normalizar saltos de línea Windows \r\n -> \n, \r -> \n
+    // Normalizar saltos de línea Windows \r\n -> \n, \r -> \n para que permanezcan como \n puro
     const normalized = rawText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
     const hasNewlines = normalized.includes("\n");
-    const isBracketed = Boolean((terminal.modes as any)?.bracketedPasteMode) || hasNewlines;
+    const isBracketed = hasNewlines || Boolean((terminal.modes as any)?.bracketedPasteMode);
 
     let payload: string;
     if (isBracketed) {
-      // Sustituir \n por \r dentro de la secuencia bracketed para el modo raw del PTY
-      const bracketedContent = normalized.replace(/\n/g, "\r");
-      payload = `\x1b[200~${bracketedContent}\x1b[201~`;
+      // Estrictamente envuelto en las secuencias de escape ANSI de inicio y fin de pegado
+      payload = `\x1b[200~${normalized}\x1b[201~`;
     } else {
       payload = normalized;
     }
@@ -290,9 +289,28 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
             smartPaste(text);
           }
         }).catch((err) => {
-          console.debug(`[PTY ${sessionId}] Error leyendo portapapeles:`, err);
+          console.debug(`[PTY ${currentSessionId}] Error leyendo portapapeles:`, err);
         });
       }
+      return false;
+    }
+
+    // Intercept Shift+Insert (Atajo clásico de terminal para pegar)
+    if (event.shiftKey && event.code === "Insert") {
+      if (event.type === "keydown") {
+        navigator.clipboard.readText().then((text) => {
+          if (text) {
+            smartPaste(text);
+          }
+        }).catch((err) => {
+          console.debug(`[PTY ${currentSessionId}] Error leyendo portapapeles en Shift+Insert:`, err);
+        });
+      }
+      return false;
+    }
+
+    // Desactivar tecla Insert suelta para evitar caracteres desprotegidos al socket
+    if (event.code === "Insert" && !event.ctrlKey && !event.altKey && !event.metaKey) {
       return false;
     }
 
@@ -316,11 +334,21 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
     targetContainer = container;
     terminal.open(container);
 
+    // Forzar activación del modo Bracketed Paste en el core de Xterm
+    try {
+      if ((terminal as any)._core?.coreService?.decPrivateModes) {
+        (terminal as any)._core.coreService.decPrivateModes.bracketedPasteMode = true;
+      }
+    } catch (e) {
+      console.debug("Note: Could not force xterm bracketedPasteMode:", e);
+    }
+
     // Clic derecho estilo Windows Terminal:
     // Si hay selección -> copiar y limpiar selección
-    // Si no hay selección -> pegar inteligentemente
+    // Si no hay selección -> pegar inteligentemente con Bracketed Paste
     contextMenuHandler = (e: MouseEvent) => {
       e.preventDefault();
+      e.stopImmediatePropagation();
       if (terminal.hasSelection()) {
         const selected = terminal.getSelection();
         if (selected) {
@@ -333,22 +361,26 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
             smartPaste(text);
           }
         }).catch((err) => {
-          console.debug(`[PTY ${sessionId}] Error leyendo portapapeles en clic derecho:`, err);
+          console.debug(`[PTY ${currentSessionId}] Error leyendo portapapeles en clic derecho:`, err);
         });
       }
     };
     container.addEventListener("contextmenu", contextMenuHandler);
 
-    // Interceptar evento paste nativo del DOM para unificar con smartPaste
+    // Interceptar evento paste nativo del DOM en fase de captura (capture: true)
+    // para evitar que el navegador envíe caracteres sueltos directamente al socket sin pasar por smartPaste
     pasteHandler = (e: ClipboardEvent) => {
       e.preventDefault();
-      e.stopPropagation();
-      const pastedText = e.clipboardData?.getData("text");
+      e.stopImmediatePropagation();
+      const pastedText = e.clipboardData?.getData("text/plain") || e.clipboardData?.getData("text");
       if (pastedText) {
         smartPaste(pastedText);
       }
     };
-    container.addEventListener("paste", pasteHandler);
+    container.addEventListener("paste", pasteHandler, true);
+    if (terminal.textarea) {
+      terminal.textarea.addEventListener("paste", pasteHandler, true);
+    }
 
     // Try WebGL acceleration with graceful Canvas/DOM fallback
     try {
@@ -380,8 +412,11 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
         targetContainer.removeEventListener("contextmenu", contextMenuHandler);
       }
       if (pasteHandler) {
-        targetContainer.removeEventListener("paste", pasteHandler);
+        targetContainer.removeEventListener("paste", pasteHandler, true);
       }
+    }
+    if (terminal.textarea && pasteHandler) {
+      terminal.textarea.removeEventListener("paste", pasteHandler, true);
     }
     try {
       terminal.dispose();
