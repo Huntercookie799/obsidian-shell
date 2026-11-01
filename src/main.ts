@@ -393,12 +393,12 @@ class VayliIslandApp {
       item.className = "profile-item";
 
       const info = document.createElement("div");
-      info.style.cssText = "display: flex; flex-direction: column; overflow: hidden;";
+      info.style.cssText = "display: flex; flex-direction: column; overflow: hidden; min-width: 0; flex: 1;";
       const name = document.createElement("span");
-      name.style.cssText = "font-weight: 600; color: #F4F4F6;";
+      name.style.cssText = "font-weight: 600; color: #F4F4F6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;";
       name.textContent = profile.name;
       const cmd = document.createElement("span");
-      cmd.style.cssText = "font-family: var(--font-mono); font-size: 9px; color: #8E8E93;";
+      cmd.style.cssText = "font-family: var(--font-mono); font-size: 9px; color: #8E8E93; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;";
       cmd.textContent = profile.command + (profile.cwd ? ` [${profile.cwd}]` : "");
       info.appendChild(name);
       info.appendChild(cmd);
@@ -406,7 +406,8 @@ class VayliIslandApp {
       const delBtn = document.createElement("button");
       delBtn.className = "profile-delete-btn";
       delBtn.innerHTML = "&times;";
-      delBtn.title = "Delete profile";
+      delBtn.title = "Eliminar perfil";
+      delBtn.style.flexShrink = "0";
       delBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         this.customProfiles = this.customProfiles.filter((p) => p.id !== profile.id);
