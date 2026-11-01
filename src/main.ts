@@ -22,6 +22,7 @@ class VayliIslandApp {
   private autoSaveTimer: number | null = null;
   private fullscreenCheckTimer: number | null = null;
   private isSavingSnapshot = false;
+  private lastCycleTabTimestamp = 0;
   private activityTimers: Map<string, number> = new Map();
 
   // Settings & Custom Profiles persisted in localStorage
@@ -753,6 +754,27 @@ class VayliIslandApp {
       this.closeActivePaneOrTab();
     });
 
+    // Custom event dispatched from Xterm (Ctrl+Tab / Ctrl+Shift+Tab)
+    window.addEventListener("vayli:cycle-tab", (e: Event) => {
+      const customEvent = e as CustomEvent<{ direction?: "next" | "prev" }>;
+      const direction = customEvent.detail?.direction || "next";
+      this.cycleTab(direction);
+    });
+
+    // Intercepción prioritaria en fase de captura para Ctrl+Tab y Ctrl+Shift+Tab
+    // Previene que el navegador/WebView cambie de foco o active comportamientos por defecto
+    window.addEventListener(
+      "keydown",
+      (e) => {
+        if ((e.ctrlKey || e.metaKey) && (e.key === "Tab" || e.code === "Tab")) {
+          e.preventDefault();
+          e.stopPropagation();
+          this.cycleTab(e.shiftKey ? "prev" : "next");
+        }
+      },
+      { capture: true }
+    );
+
     // 7. Anti-Flicker: Sincronización precisa con fin de animación CSS
     this.islandContainer.addEventListener("transitionend", (e) => {
       if (e.propertyName === "width" || e.propertyName === "height") {
@@ -842,6 +864,14 @@ class VayliIslandApp {
       if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === "w") {
         e.preventDefault();
         this.closeActivePaneOrTab();
+        return;
+      }
+
+      // Ctrl+Tab / Ctrl+Shift+Tab: Navegación cíclica rápida entre pestañas
+      if ((e.ctrlKey || e.metaKey) && (e.key === "Tab" || e.code === "Tab")) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.cycleTab(e.shiftKey ? "prev" : "next");
         return;
       }
     });
@@ -1165,6 +1195,32 @@ class VayliIslandApp {
 
     if (this.currentMode === "expanded") {
       this.fitActiveTabPanes();
+    }
+  }
+
+  public cycleTab(direction: "next" | "prev" = "next") {
+    const now = Date.now();
+    if (now - this.lastCycleTabTimestamp < 80) return;
+    this.lastCycleTabTimestamp = now;
+
+    const tabKeys = Array.from(this.tabs.keys());
+    if (tabKeys.length <= 1) return;
+
+    let currentIndex = this.activeTabId ? tabKeys.indexOf(this.activeTabId) : 0;
+    if (currentIndex === -1) currentIndex = 0;
+
+    const totalTabs = tabKeys.length;
+    const targetIndex = direction === "next"
+      ? (currentIndex + 1) % totalTabs
+      : (currentIndex - 1 + totalTabs) % totalTabs;
+
+    const targetTabId = tabKeys[targetIndex];
+    if (targetTabId) {
+      this.switchTab(targetTabId);
+      const activePane = this.getActivePane();
+      if (activePane) {
+        activePane.terminal.focus();
+      }
     }
   }
 

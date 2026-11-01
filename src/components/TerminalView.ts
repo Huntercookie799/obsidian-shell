@@ -323,6 +323,20 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
       return false;
     }
 
+    // Intercept Ctrl+Tab and Ctrl+Shift+Tab to cycle tabs instead of typing tab in terminal
+    if ((event.ctrlKey || event.metaKey) && (event.key === "Tab" || event.code === "Tab")) {
+      if (event.type === "keydown") {
+        event.preventDefault();
+        event.stopPropagation();
+        window.dispatchEvent(
+          new CustomEvent("vayli:cycle-tab", {
+            detail: { direction: event.shiftKey ? "prev" : "next" },
+          })
+        );
+      }
+      return false;
+    }
+
     return true;
   });
 
