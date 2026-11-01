@@ -41,6 +41,8 @@ export interface TerminalPane {
   searchAddon: SearchAddon;
   serializeAddon: SerializeAddon;
   serializeBuffer: (maxLines?: number) => string;
+  writeBatched: (data: string) => void;
+  isUserScrolledUp: () => boolean;
   smartPaste?: (rawText: string) => void;
   element: HTMLDivElement;
 }

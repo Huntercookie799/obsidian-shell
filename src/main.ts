@@ -924,13 +924,15 @@ class VayliIslandApp {
     paneEl.id = paneId;
     tab.containerElement.appendChild(paneEl);
 
-    const { terminal, fitAddon, searchAddon, serializeAddon, serializeBuffer, smartPaste, mount } =
+    const { terminal, fitAddon, searchAddon, serializeAddon, serializeBuffer, smartPaste, writeBatched, isUserScrolledUp, mount } =
       createTerminalInstance(sessionId, this.settings.accentColor);
     mount(paneEl);
 
     if (initialBuffer && initialBuffer.length > 0) {
-      terminal.write(initialBuffer);
-      terminal.write("\r\n\x1b[90m── Sesión restaurada ──\x1b[0m\r\n");
+      const restoredData = initialBuffer + "\r\n\x1b[90m── Sesión restaurada ──\x1b[0m\r\n";
+      terminal.write(restoredData, () => {
+        terminal.scrollToBottom();
+      });
     }
 
     const pane: TerminalPane = {
@@ -946,6 +948,8 @@ class VayliIslandApp {
       serializeAddon,
       serializeBuffer,
       smartPaste,
+      writeBatched,
+      isUserScrolledUp,
       element: paneEl,
     };
 
@@ -980,7 +984,7 @@ class VayliIslandApp {
 
     // Setup PTY Streaming & Status Listeners
     const outputUnlisten = await listen<string>(`pty-output-${sessionId}`, (event) => {
-      pane.terminal.write(event.payload);
+      pane.writeBatched(event.payload);
 
       const clean = stripAnsi(event.payload);
       if (clean.length > 0) {
@@ -1076,7 +1080,7 @@ class VayliIslandApp {
 
     requestAnimationFrame(() => {
       tab.panes.forEach((pane) => {
-        fitSafely(pane.terminal, pane.fitAddon, pane.sessionId);
+        fitSafely(pane.terminal, pane.fitAddon, pane.sessionId, pane.isUserScrolledUp());
       });
       const active = this.getActivePane();
       if (active) active.terminal.focus();

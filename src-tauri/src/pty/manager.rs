@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::io::Read;
+use std::sync::mpsc::{channel, RecvTimeoutError};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use parking_lot::Mutex;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use sysinfo::{Pid, ProcessesToUpdate, System};
@@ -99,19 +101,52 @@ impl PtyManager {
         let child_arc = session.child.clone();
         let shell_name_for_event = chosen_shell.clone();
 
-        // Spawn background reader thread
+        // Spawn background reader and batching thread
         std::thread::spawn(move || {
-            let mut buf = [0u8; 4096];
-            loop {
-                match reader.read(&mut buf) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        let text = String::from_utf8_lossy(&buf[..n]).to_string();
-                        let event_name = format!("pty-output-{}", reader_session_id);
-                        let _ = app_handle_clone.emit(&event_name, text);
+            let (tx, rx) = channel::<Vec<u8>>();
+            let emit_session_id = reader_session_id.clone();
+            let emit_app = app_handle_clone.clone();
+
+            // Producer thread: reads up to 32 KB chunks from PTY master reader
+            std::thread::spawn(move || {
+                let mut buf = [0u8; 32768];
+                loop {
+                    match reader.read(&mut buf) {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            if tx.send(buf[..n].to_vec()).is_err() {
+                                break;
+                            }
+                        }
+                        Err(_) => break,
                     }
-                    Err(_) => break,
                 }
+            });
+
+            // Consumer & batching loop: accumulates continuous stream within up to 8ms or 64 KB
+            let mut accumulated: Vec<u8> = Vec::with_capacity(65536);
+            while let Ok(first_chunk) = rx.recv() {
+                accumulated.extend_from_slice(&first_chunk);
+                let deadline = Instant::now() + Duration::from_millis(8);
+
+                while accumulated.len() < 65536 {
+                    let now = Instant::now();
+                    if now >= deadline {
+                        break;
+                    }
+                    match rx.recv_timeout(deadline - now) {
+                        Ok(next_chunk) => {
+                            accumulated.extend_from_slice(&next_chunk);
+                        }
+                        Err(RecvTimeoutError::Timeout) => break,
+                        Err(RecvTimeoutError::Disconnected) => break,
+                    }
+                }
+
+                let text = String::from_utf8_lossy(&accumulated).to_string();
+                let event_name = format!("pty-output-{}", emit_session_id);
+                let _ = emit_app.emit(&event_name, text);
+                accumulated.clear();
             }
 
             // Detect process exit

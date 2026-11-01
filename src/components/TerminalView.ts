@@ -82,7 +82,7 @@ export function stripAnsi(text: string): string {
 /**
  * Synchronously and safely fits xterm dimensions and propagates to PTY
  */
-export function fitSafely(terminal: Terminal, fitAddon: FitAddon, sessionId: string) {
+export function fitSafely(terminal: Terminal, fitAddon: FitAddon, sessionId: string, isUserScrolledUp: boolean = false) {
   const element = terminal.element;
   if (!element || element.offsetWidth < 50 || element.offsetHeight < 50) {
     return;
@@ -94,6 +94,9 @@ export function fitSafely(terminal: Terminal, fitAddon: FitAddon, sessionId: str
     const rows = terminal.rows;
     if (cols > 0 && rows > 0) {
       invoke("resize_pty", { sessionId, cols, rows }).catch(() => {});
+    }
+    if (!isUserScrolledUp) {
+      terminal.scrollToBottom();
     }
   } catch (err) {
     console.debug("[Anti-Flicker] Safe fit deferred:", err);
@@ -107,6 +110,8 @@ export function createTerminalInstance(sessionId: string, initialAccent: string 
   serializeAddon: SerializeAddon;
   serializeBuffer: (maxLines?: number) => string;
   smartPaste: (rawText: string) => void;
+  writeBatched: (data: string) => void;
+  isUserScrolledUp: () => boolean;
   mount: (container: HTMLElement) => void;
   dispose: () => void;
 } {
@@ -137,6 +142,59 @@ export function createTerminalInstance(sessionId: string, initialAccent: string 
   terminal.loadAddon(searchAddon);
   terminal.loadAddon(serializeAddon);
   terminal.loadAddon(new WebLinksAddon());
+
+  // Control de scroll y auto-anclaje al final del buffer
+  let isUserScrolledUp = false;
+  let pendingOutput = "";
+  let rafScheduled = false;
+
+  // Botón flotante para saltar al final (↓ Final)
+  const scrollBottomBtn = document.createElement("button");
+  scrollBottomBtn.className = "scroll-bottom-btn hidden";
+  scrollBottomBtn.innerHTML = `
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="6 9 12 15 18 9"></polyline>
+      <line x1="12" y1="3" x2="12" y2="15"></line>
+    </svg>
+    <span>Final</span>
+  `;
+  scrollBottomBtn.title = "Saltar al final del buffer";
+  scrollBottomBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    isUserScrolledUp = false;
+    terminal.scrollToBottom();
+    scrollBottomBtn.classList.add("hidden");
+    terminal.focus();
+  });
+
+  terminal.onScroll(() => {
+    const buf = terminal.buffer.active;
+    isUserScrolledUp = buf.viewportY < buf.baseY;
+    if (isUserScrolledUp) {
+      scrollBottomBtn.classList.remove("hidden");
+    } else {
+      scrollBottomBtn.classList.add("hidden");
+    }
+  });
+
+  // Renderizado optimizado por Animation Frame (RAF Batching)
+  const writeBatched = (data: string) => {
+    pendingOutput += data;
+    if (!rafScheduled) {
+      rafScheduled = true;
+      requestAnimationFrame(() => {
+        rafScheduled = false;
+        if (pendingOutput.length === 0) return;
+        const chunk = pendingOutput;
+        pendingOutput = "";
+        terminal.write(chunk, () => {
+          if (!isUserScrolledUp) {
+            terminal.scrollToBottom();
+          }
+        });
+      });
+    }
+  };
 
   const serializeBuffer = (maxLines: number = 500): string => {
     try {
@@ -269,12 +327,15 @@ export function createTerminalInstance(sessionId: string, initialAccent: string 
       console.warn("WebGL addon not supported, falling back to Canvas renderer", e);
     }
 
+    container.appendChild(scrollBottomBtn);
+
     requestAnimationFrame(() => {
-      fitSafely(terminal, fitAddon, sessionId);
+      fitSafely(terminal, fitAddon, sessionId, isUserScrolledUp);
     });
   };
 
   const dispose = () => {
+    scrollBottomBtn.remove();
     if (targetContainer) {
       if (contextMenuHandler) {
         targetContainer.removeEventListener("contextmenu", contextMenuHandler);
@@ -290,5 +351,16 @@ export function createTerminalInstance(sessionId: string, initialAccent: string 
     }
   };
 
-  return { terminal, fitAddon, searchAddon, serializeAddon, serializeBuffer, smartPaste, mount, dispose };
+  return {
+    terminal,
+    fitAddon,
+    searchAddon,
+    serializeAddon,
+    serializeBuffer,
+    smartPaste,
+    writeBatched,
+    isUserScrolledUp: () => isUserScrolledUp,
+    mount,
+    dispose,
+  };
 }
