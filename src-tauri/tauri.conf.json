@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ObsidianShell",
+  "version": "0.1.0",
+  "identifier": "com.obsidianshell.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "ObsidianShell",
+        "width": 260,
+        "height": 34,
+        "resizable": false,
+        "maximizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZFREY1NUQyMzYzRkJBOTQKUldTVXVqODIwbFhmYnNIZ1JPWmJQM0h4N1ZhdWVUMUhmaDk5TFJ2K1BHUFlBbmdnTHpCR0V3VVoK",
+      "endpoints": [
+        "https://github.com/IDGS-803-23001488/obsidian-shell/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

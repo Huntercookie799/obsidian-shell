@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#080808"/>
+      <stop offset="100%" stop-color="#141418"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <!-- Background base -->
+  <rect width="512" height="512" rx="110" fill="url(#bg)"/>
+  
+  <!-- Notch Island Pill Outer Frame -->
+  <rect x="76" y="196" width="360" height="120" rx="60" fill="#0D0D10" stroke="#FF6B00" stroke-width="6" filter="url(#glow)"/>
+  
+  <!-- Inner Glow Ring -->
+  <rect x="80" y="200" width="352" height="112" rx="56" fill="#080808" stroke="#1F1F24" stroke-width="2"/>
+  
+  <!-- Terminal Prompt Symbol >_ -->
+  <path d="M 170 236 L 210 256 L 170 276" fill="none" stroke="#FF6B00" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="230" y1="276" x2="270" y2="276" stroke="#F4F4F6" stroke-width="12" stroke-linecap="round"/>
+  
+  <!-- Activity Orb -->
+  <circle cx="330" cy="256" r="10" fill="#FF8533"/>
+</svg>
