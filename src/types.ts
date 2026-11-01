@@ -12,6 +12,7 @@ export interface ObsidianSettings {
   restoreSessionOnStartup: boolean;
   collapsedWidget: CollapsedWidgetType;
   clock24h: boolean;
+  accentColor: string;
 }
 
 export interface SystemMetrics {

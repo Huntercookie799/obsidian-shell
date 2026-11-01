@@ -1,15 +1,18 @@
 :root {
+  --accent-color: #FF6B00;
+  --accent-rgb: 255, 107, 0;
+
   --vayli-bg-pill: #080808;
   --vayli-bg-expanded: #0D0D0F;
-  --vayli-accent-primary: #FF6B00;
-  --vayli-accent-hover: #FF8533;
-  --vayli-accent-glow: rgba(255, 107, 0, 0.4);
+  --vayli-accent-primary: var(--accent-color);
+  --vayli-accent-hover: var(--accent-color);
+  --vayli-accent-glow: rgba(var(--accent-rgb), 0.4);
   --vayli-text-primary: #F4F4F6;
   --vayli-text-muted: #8E8E93;
   --vayli-border-idle: #1F1F24;
   --vayli-status-success: #10B981;
   --vayli-status-error: #EF4444;
-  --vayli-selection-bg: rgba(255, 107, 0, 0.25);
+  --vayli-selection-bg: rgba(var(--accent-rgb), 0.25);
   
   --font-mono: "JetBrains Mono", "Cascadia Code", "Fira Code", monospace;
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -257,7 +260,7 @@ html, body {
 }
 
 .glance-status-tag.running {
-  background: rgba(255, 107, 0, 0.2);
+  background: rgba(var(--accent-rgb), 0.2);
   color: var(--vayli-accent-primary);
 }
 
@@ -441,8 +444,8 @@ html, body {
 .version-badge.available {
   border-color: var(--vayli-accent-primary);
   color: var(--vayli-accent-primary);
-  background: rgba(255, 107, 0, 0.12);
-  box-shadow: 0 0 10px rgba(255, 107, 0, 0.2);
+  background: rgba(var(--accent-rgb), 0.12);
+  box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.2);
 }
 
 .version-badge.available .version-dot {
@@ -454,7 +457,7 @@ html, body {
 .version-badge.downloading {
   border-color: var(--vayli-accent-hover);
   color: var(--vayli-accent-hover);
-  background: rgba(255, 133, 51, 0.15);
+  background: rgba(var(--accent-rgb), 0.15);
 }
 
 .version-badge.ready {
@@ -546,8 +549,8 @@ html, body {
 }
 
 .terminal-pane.active-pane {
-  border-color: rgba(255, 107, 0, 0.5);
-  box-shadow: 0 0 10px rgba(255, 107, 0, 0.2);
+  border-color: rgba(var(--accent-rgb), 0.5);
+  box-shadow: 0 0 10px rgba(var(--accent-rgb), 0.2);
 }
 
 /* Floating Buffer Search Bar (Ctrl+Shift+F) */
@@ -687,7 +690,7 @@ html, body {
 }
 
 .menu-item-icon.orange {
-  background: rgba(255, 107, 0, 0.2);
+  background: rgba(var(--accent-rgb), 0.2);
   color: var(--vayli-accent-primary);
 }
 
@@ -840,7 +843,7 @@ html, body {
 }
 
 .menu-update-btn:hover {
-  background: rgba(255, 107, 0, 0.15);
+  background: rgba(var(--accent-rgb), 0.15);
   color: var(--vayli-accent-hover);
 }
 
@@ -1079,4 +1082,70 @@ html, body {
 .setting-select option {
   background: #111115;
   color: #F4F4F6;
+}
+
+/* Selector de Color de Acento Dinámico */
+.accent-palette-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.color-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  outline: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  padding: 0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.color-swatch:hover {
+  transform: scale(1.15);
+}
+
+.color-swatch.active {
+  border-color: #FFFFFF;
+  box-shadow: 0 0 10px var(--vayli-accent-glow), 0 0 0 1px rgba(255, 255, 255, 0.5);
+  transform: scale(1.12);
+}
+
+.color-picker-label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 1px dashed rgba(255, 255, 255, 0.35);
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+  background: #181820;
+}
+
+.color-picker-label:hover {
+  border-color: rgba(255, 255, 255, 0.8);
+  transform: scale(1.15);
+}
+
+.color-picker-input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+.color-picker-preview {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: conic-gradient(from 180deg at 50% 50%, #FF6B00 0deg, #8B5CF6 72deg, #06B6D4 144deg, #10B981 216deg, #F43F5E 288deg, #FF6B00 360deg);
+  pointer-events: none;
 }

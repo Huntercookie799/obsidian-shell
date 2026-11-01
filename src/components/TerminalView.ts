@@ -33,6 +33,41 @@ export const VAYLI_THEME = {
 };
 
 /**
+ * Convierte un código hexadecimal (#RGB o #RRGGBB) a valores RGB
+ */
+export function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const clean = hex.replace("#", "").trim();
+  if (clean.length === 3) {
+    const r = parseInt(clean[0] + clean[0], 16);
+    const g = parseInt(clean[1] + clean[1], 16);
+    const b = parseInt(clean[2] + clean[2], 16);
+    if (isNaN(r) || isNaN(g) || isNaN(b)) return null;
+    return { r, g, b };
+  }
+  if (clean.length === 6) {
+    const r = parseInt(clean.substring(0, 2), 16);
+    const g = parseInt(clean.substring(2, 4), 16);
+    const b = parseInt(clean.substring(4, 6), 16);
+    if (isNaN(r) || isNaN(g) || isNaN(b)) return null;
+    return { r, g, b };
+  }
+  return null;
+}
+
+/**
+ * Actualiza el cursor y fondo de selección de Xterm en caliente
+ */
+export function updateTerminalAccentTheme(terminal: Terminal, hex: string) {
+  const rgb = hexToRgb(hex) || { r: 255, g: 107, b: 0 };
+  terminal.options.theme = {
+    ...terminal.options.theme,
+    cursor: hex,
+    selectionBackground: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.25)`,
+    selectionInactiveBackground: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15)`,
+  };
+}
+
+/**
  * Strips ANSI escape sequences, control chars, and OSC title strings
  */
 export function stripAnsi(text: string): string {
@@ -65,7 +100,7 @@ export function fitSafely(terminal: Terminal, fitAddon: FitAddon, sessionId: str
   }
 }
 
-export function createTerminalInstance(sessionId: string): {
+export function createTerminalInstance(sessionId: string, initialAccent: string = "#FF6B00"): {
   terminal: Terminal;
   fitAddon: FitAddon;
   searchAddon: SearchAddon;
@@ -74,8 +109,16 @@ export function createTerminalInstance(sessionId: string): {
   mount: (container: HTMLElement) => void;
   dispose: () => void;
 } {
+  const rgb = hexToRgb(initialAccent) || { r: 255, g: 107, b: 0 };
+  const dynamicTheme = {
+    ...VAYLI_THEME,
+    cursor: initialAccent,
+    selectionBackground: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.25)`,
+    selectionInactiveBackground: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15)`,
+  };
+
   const terminal = new Terminal({
-    theme: VAYLI_THEME,
+    theme: dynamicTheme,
     fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace",
     fontSize: 13,
     lineHeight: 1.25,

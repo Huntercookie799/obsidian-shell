@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { isEnabled as isAutostartEnabled, enable as enableAutostart, disable as disableAutostart } from "@tauri-apps/plugin-autostart";
-import { createTerminalInstance, fitSafely, stripAnsi } from "./components/TerminalView";
+import { createTerminalInstance, fitSafely, hexToRgb, stripAnsi, updateTerminalAccentTheme } from "./components/TerminalView";
 import { CollapsedWidgetType, CustomProfile, IslandMode, ObsidianSettings, PtyStatus, SessionSnapshot, SnapshotPane, SnapshotTab, SystemMetrics, TerminalPane, TerminalTab } from "./types";
 import { updateManager } from "./updater/UpdateManager";
 
@@ -29,6 +29,7 @@ class VayliIslandApp {
     restoreSessionOnStartup: true,
     collapsedWidget: "pty_status",
     clock24h: true,
+    accentColor: "#FF6B00",
   };
   private customProfiles: CustomProfile[] = [];
 
@@ -67,6 +68,7 @@ class VayliIslandApp {
   private toggleAutoCollapse!: HTMLInputElement;
   private toggleAutostart!: HTMLInputElement;
   private toggleRestoreSession!: HTMLInputElement;
+  private inputAccentPicker!: HTMLInputElement;
   private selectCollapsedWidget!: HTMLSelectElement;
   private settingClockRow!: HTMLElement;
   private toggleClock24h!: HTMLInputElement;
@@ -154,6 +156,7 @@ class VayliIslandApp {
     this.toggleAutoCollapse = document.getElementById("toggle-auto-collapse") as HTMLInputElement;
     this.toggleAutostart = document.getElementById("toggle-autostart") as HTMLInputElement;
     this.toggleRestoreSession = document.getElementById("toggle-restore-session") as HTMLInputElement;
+    this.inputAccentPicker = document.getElementById("input-accent-picker") as HTMLInputElement;
     this.selectCollapsedWidget = document.getElementById("select-collapsed-widget") as HTMLSelectElement;
     this.settingClockRow = document.getElementById("setting-clock-row")!;
     this.toggleClock24h = document.getElementById("toggle-clock-24h") as HTMLInputElement;
@@ -212,6 +215,9 @@ class VayliIslandApp {
       console.debug("Autostart query status:", e);
     }
 
+    // Aplicar color de acento persistido
+    this.applyAccentColor(this.settings.accentColor || "#FF6B00");
+
     this.applyCollapsedWidget();
   }
 
@@ -220,6 +226,34 @@ class VayliIslandApp {
       localStorage.setItem("obsidian_settings", JSON.stringify(this.settings));
     } catch (e) {
       console.warn("Failed to persist settings in localStorage:", e);
+    }
+  }
+
+  public applyAccentColor(hex: string) {
+    const rgb = hexToRgb(hex) || { r: 255, g: 107, b: 0 };
+    document.documentElement.style.setProperty("--accent-color", hex);
+    document.documentElement.style.setProperty("--accent-rgb", `${rgb.r}, ${rgb.g}, ${rgb.b}`);
+
+    // Actualizar en caliente el cursor y selección en todas las terminales abiertas
+    this.tabs.forEach((tab) => {
+      tab.panes.forEach((pane) => {
+        updateTerminalAccentTheme(pane.terminal, hex);
+      });
+    });
+
+    // Actualizar resaltado en las muestras circulares (swatches)
+    const swatches = document.querySelectorAll<HTMLElement>(".color-swatch");
+    swatches.forEach((swatch) => {
+      const swatchColor = swatch.dataset.color?.toLowerCase();
+      if (swatchColor === hex.toLowerCase()) {
+        swatch.classList.add("active");
+      } else {
+        swatch.classList.remove("active");
+      }
+    });
+
+    if (this.inputAccentPicker) {
+      this.inputAccentPicker.value = hex;
     }
   }
 
@@ -641,6 +675,30 @@ class VayliIslandApp {
       }
     });
 
+    // Selección reactiva de color de acento
+    const swatches = document.querySelectorAll<HTMLElement>(".color-swatch");
+    swatches.forEach((swatch) => {
+      swatch.addEventListener("click", () => {
+        const color = swatch.dataset.color;
+        if (color) {
+          this.settings.accentColor = color;
+          this.applyAccentColor(color);
+          this.saveSettings();
+        }
+      });
+    });
+
+    if (this.inputAccentPicker) {
+      this.inputAccentPicker.addEventListener("input", () => {
+        this.applyAccentColor(this.inputAccentPicker.value);
+      });
+      this.inputAccentPicker.addEventListener("change", () => {
+        this.settings.accentColor = this.inputAccentPicker.value;
+        this.applyAccentColor(this.inputAccentPicker.value);
+        this.saveSettings();
+      });
+    }
+
     document.addEventListener("click", () => {
       this.shellMenuPopover.classList.add("hidden");
       this.settingsPopover.classList.add("hidden");
@@ -867,7 +925,7 @@ class VayliIslandApp {
     tab.containerElement.appendChild(paneEl);
 
     const { terminal, fitAddon, searchAddon, serializeAddon, serializeBuffer, mount } =
-      createTerminalInstance(sessionId);
+      createTerminalInstance(sessionId, this.settings.accentColor);
     mount(paneEl);
 
     if (initialBuffer && initialBuffer.length > 0) {
