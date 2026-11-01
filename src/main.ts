@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { isEnabled as isAutostartEnabled, enable as enableAutostart, disable as disableAutostart } from "@tauri-apps/plugin-autostart";
-import { createTerminalInstance, fitSafely, hexToRgb, stripAnsi, updateTerminalAccentTheme } from "./components/TerminalView";
+import { createTerminalInstance, fitSafely, hexToRgb, setInitialDimensions, stripAnsi, updateTerminalAccentTheme } from "./components/TerminalView";
 import { CollapsedWidgetType, CustomProfile, IslandMode, ObsidianSettings, PtyStatus, SessionSnapshot, SnapshotPane, SnapshotTab, SystemMetrics, TerminalPane, TerminalTab } from "./types";
 import { updateManager } from "./updater/UpdateManager";
 
@@ -946,16 +946,6 @@ class VayliIslandApp {
     this.paneCounter += 1;
     const paneId = `pane-${this.paneCounter}`;
 
-    const cols = 80;
-    const rows = 24;
-
-    const sessionId = await invoke<string>("create_pty_session", {
-      shellPath: shellPath ?? null,
-      cwd: cwd ?? null,
-      cols,
-      rows,
-    });
-
     const shellDisplay = overrideProcessName || (shellPath
       ? shellPath.split(/[/\\]/).pop() || shellPath
       : navigator.platform.includes("Win")
@@ -967,9 +957,27 @@ class VayliIslandApp {
     paneEl.id = paneId;
     tab.containerElement.appendChild(paneEl);
 
-    const { terminal, fitAddon, searchAddon, serializeAddon, serializeBuffer, smartPaste, writeBatched, isUserScrolledUp, mount } =
-      createTerminalInstance(sessionId, this.settings.accentColor);
-    mount(paneEl);
+    // 1. Instanciar y montar terminal antes de crear sesión PTY
+    const termInstance = createTerminalInstance("", this.settings.accentColor);
+    termInstance.mount(paneEl);
+
+    // 2. Calcular dimensiones reales con fitAddon.proposeDimensions() para que el proceso nazca con el ancho definitivo
+    const proposed = termInstance.fitAddon.proposeDimensions();
+    const cols = proposed && proposed.cols > 0 ? proposed.cols : Math.max(20, Math.floor((paneEl.clientWidth || 800) / 8));
+    const rows = proposed && proposed.rows > 0 ? proposed.rows : Math.max(5, Math.floor((paneEl.clientHeight || 400) / 17));
+    termInstance.terminal.resize(cols, rows);
+
+    // 3. Crear proceso PTY con dimensiones exactas del viewport
+    const sessionId = await invoke<string>("create_pty_session", {
+      shellPath: shellPath ?? null,
+      cwd: cwd ?? null,
+      cols,
+      rows,
+    });
+    termInstance.setSessionId(sessionId);
+    setInitialDimensions(sessionId, cols, rows);
+
+    const { terminal, fitAddon, searchAddon, serializeAddon, serializeBuffer, smartPaste, writeBatched, isUserScrolledUp, setSessionId } = termInstance;
 
     if (initialBuffer && initialBuffer.length > 0) {
       const restoredData = initialBuffer + "\r\n\x1b[90m── Sesión restaurada ──\x1b[0m\r\n";
@@ -993,6 +1001,7 @@ class VayliIslandApp {
       smartPaste,
       writeBatched,
       isUserScrolledUp,
+      setSessionId,
       element: paneEl,
     };
 
@@ -1029,9 +1038,14 @@ class VayliIslandApp {
     const outputUnlisten = await listen<string>(`pty-output-${sessionId}`, (event) => {
       pane.writeBatched(event.payload);
 
-      const clean = stripAnsi(event.payload);
-      if (clean.length > 0) {
-        pane.lastSnippet = clean;
+      // Si la isla está en estado Expanded, omite por completo la limpieza y actualización del DOM de Glance
+      if (this.currentMode !== "expanded") {
+        const raw = event.payload;
+        const tail = raw.length > 400 ? raw.slice(-400) : raw;
+        const clean = stripAnsi(tail);
+        if (clean.length > 0) {
+          pane.lastSnippet = clean;
+        }
       }
 
       this.updatePaneStatus(tab, pane, "running");
@@ -1417,10 +1431,12 @@ class VayliIslandApp {
     if (activePane) {
       const activeTab = this.tabs.get(this.activeTabId!);
       this.currentProcessEl.textContent = activePane.processName;
-      this.glanceTitle.textContent = activeTab?.title || activePane.processName;
-      this.glanceSnippet.textContent = activePane.lastSnippet || "Lista";
-      this.glanceStatusTag.textContent = activePane.status.toUpperCase();
-      this.glanceStatusTag.className = `glance-status-tag ${activePane.status}`;
+      if (this.currentMode !== "expanded") {
+        this.glanceTitle.textContent = activeTab?.title || activePane.processName;
+        this.glanceSnippet.textContent = activePane.lastSnippet || "Lista";
+        this.glanceStatusTag.textContent = activePane.status.toUpperCase();
+        this.glanceStatusTag.className = `glance-status-tag ${activePane.status}`;
+      }
       this.updateRimLight(activePane.status);
 
       // Update Live Log widget in pill mode

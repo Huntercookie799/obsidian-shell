@@ -67,6 +67,9 @@ impl PtySession {
     }
 
     pub fn resize(&mut self, cols: u16, rows: u16) -> Result<(), String> {
+        if self.cols == cols && self.rows == rows {
+            return Ok(());
+        }
         self.cols = cols;
         self.rows = rows;
         let master = self.master.lock();

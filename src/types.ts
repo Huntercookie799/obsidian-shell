@@ -45,6 +45,7 @@ export interface TerminalPane {
   writeBatched: (data: string) => void;
   isUserScrolledUp: () => boolean;
   smartPaste?: (rawText: string) => void;
+  setSessionId?: (id: string) => void;
   element: HTMLDivElement;
 }
 

@@ -79,10 +79,22 @@ export function stripAnsi(text: string): string {
     .trim();
 }
 
+const lastDimensionsMap = new Map<string, { cols: number; rows: number }>();
+
+/**
+ * Registra dimensiones iniciales para evitar un primer resize redundante
+ */
+export function setInitialDimensions(sessionId: string, cols: number, rows: number) {
+  if (sessionId && cols > 0 && rows > 0) {
+    lastDimensionsMap.set(sessionId, { cols, rows });
+  }
+}
+
 /**
  * Synchronously and safely fits xterm dimensions and propagates to PTY
  */
 export function fitSafely(terminal: Terminal, fitAddon: FitAddon, sessionId: string, isUserScrolledUp: boolean = false) {
+  if (!sessionId) return;
   const element = terminal.element;
   if (!element || element.offsetWidth < 50 || element.offsetHeight < 50) {
     return;
@@ -93,7 +105,11 @@ export function fitSafely(terminal: Terminal, fitAddon: FitAddon, sessionId: str
     const cols = terminal.cols;
     const rows = terminal.rows;
     if (cols > 0 && rows > 0) {
-      invoke("resize_pty", { sessionId, cols, rows }).catch(() => {});
+      const last = lastDimensionsMap.get(sessionId);
+      if (!last || last.cols !== cols || last.rows !== rows) {
+        lastDimensionsMap.set(sessionId, { cols, rows });
+        invoke("resize_pty", { sessionId, cols, rows }).catch(() => {});
+      }
     }
     if (!isUserScrolledUp) {
       terminal.scrollToBottom();
@@ -103,7 +119,7 @@ export function fitSafely(terminal: Terminal, fitAddon: FitAddon, sessionId: str
   }
 }
 
-export function createTerminalInstance(sessionId: string, initialAccent: string = "#FF6B00"): {
+export function createTerminalInstance(sessionId: string = "", initialAccent: string = "#FF6B00"): {
   terminal: Terminal;
   fitAddon: FitAddon;
   searchAddon: SearchAddon;
@@ -112,9 +128,11 @@ export function createTerminalInstance(sessionId: string, initialAccent: string 
   smartPaste: (rawText: string) => void;
   writeBatched: (data: string) => void;
   isUserScrolledUp: () => boolean;
+  setSessionId: (newId: string) => void;
   mount: (container: HTMLElement) => void;
   dispose: () => void;
 } {
+  let currentSessionId = sessionId;
   const rgb = hexToRgb(initialAccent) || { r: 255, g: 107, b: 0 };
   const dynamicTheme = {
     ...VAYLI_THEME,
@@ -132,7 +150,7 @@ export function createTerminalInstance(sessionId: string, initialAccent: string 
     cursorStyle: "bar",
     cursorWidth: 2,
     allowTransparency: true,
-    scrollback: 5000,
+    scrollback: 2500,
   });
 
   const fitAddon = new FitAddon();
@@ -177,7 +195,7 @@ export function createTerminalInstance(sessionId: string, initialAccent: string 
     }
   });
 
-  // Renderizado optimizado por Animation Frame (RAF Batching)
+  // Renderizado optimizado por Animation Frame (RAF Batching con Fast-Forward masivo)
   const writeBatched = (data: string) => {
     pendingOutput += data;
     if (!rafScheduled) {
@@ -185,8 +203,22 @@ export function createTerminalInstance(sessionId: string, initialAccent: string 
       requestAnimationFrame(() => {
         rafScheduled = false;
         if (pendingOutput.length === 0) return;
-        const chunk = pendingOutput;
+
+        let chunk = pendingOutput;
         pendingOutput = "";
+
+        // Fast-Forward si la cola acumulada supera los 180,000 caracteres
+        const MAX_PENDING_CHARS = 180_000;
+        if (chunk.length > MAX_PENDING_CHARS) {
+          const tail = chunk.slice(-MAX_PENDING_CHARS);
+          const newlineIndex = tail.indexOf("\n");
+          if (newlineIndex !== -1) {
+            chunk = "\x1b[0m" + tail.slice(newlineIndex + 1);
+          } else {
+            chunk = "\x1b[0m" + tail;
+          }
+        }
+
         terminal.write(chunk, () => {
           if (!isUserScrolledUp) {
             terminal.scrollToBottom();
@@ -200,14 +232,14 @@ export function createTerminalInstance(sessionId: string, initialAccent: string 
     try {
       return serializeAddon.serialize({ scrollback: maxLines });
     } catch (e) {
-      console.warn(`[PTY ${sessionId}] Error al serializar buffer:`, e);
+      console.warn(`[PTY ${currentSessionId}] Error al serializar buffer:`, e);
       return "";
     }
   };
 
   // Pegado Inteligente Multi-Línea con soporte forzado de Bracketed Paste
   const smartPaste = (rawText: string) => {
-    if (!rawText || rawText.length === 0) return;
+    if (!rawText || rawText.length === 0 || !currentSessionId) return;
 
     // Normalizar saltos de línea Windows \r\n -> \n, \r -> \n
     const normalized = rawText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
@@ -223,16 +255,18 @@ export function createTerminalInstance(sessionId: string, initialAccent: string 
       payload = normalized;
     }
 
-    invoke("write_to_pty", { sessionId, data: payload }).catch((err) => {
-      console.error(`[PTY ${sessionId}] Error al pegar texto en PTY:`, err);
+    invoke("write_to_pty", { sessionId: currentSessionId, data: payload }).catch((err) => {
+      console.error(`[PTY ${currentSessionId}] Error al pegar texto en PTY:`, err);
     });
   };
 
   // Input listener from user keystrokes -> Rust PTY
   terminal.onData((data) => {
-    invoke("write_to_pty", { sessionId, data }).catch((err) => {
-      console.error(`[PTY ${sessionId}] Write error:`, err);
-    });
+    if (currentSessionId) {
+      invoke("write_to_pty", { sessionId: currentSessionId, data }).catch((err) => {
+        console.error(`[PTY ${currentSessionId}] Write error:`, err);
+      });
+    }
   });
 
   // Attach key listeners for clipboard productivity and pane close
@@ -330,12 +364,17 @@ export function createTerminalInstance(sessionId: string, initialAccent: string 
     container.appendChild(scrollBottomBtn);
 
     requestAnimationFrame(() => {
-      fitSafely(terminal, fitAddon, sessionId, isUserScrolledUp);
+      if (currentSessionId) {
+        fitSafely(terminal, fitAddon, currentSessionId, isUserScrolledUp);
+      }
     });
   };
 
   const dispose = () => {
     scrollBottomBtn.remove();
+    if (currentSessionId) {
+      lastDimensionsMap.delete(currentSessionId);
+    }
     if (targetContainer) {
       if (contextMenuHandler) {
         targetContainer.removeEventListener("contextmenu", contextMenuHandler);
@@ -360,6 +399,9 @@ export function createTerminalInstance(sessionId: string, initialAccent: string 
     smartPaste,
     writeBatched,
     isUserScrolledUp: () => isUserScrolledUp,
+    setSessionId: (newId: string) => {
+      currentSessionId = newId;
+    },
     mount,
     dispose,
   };
