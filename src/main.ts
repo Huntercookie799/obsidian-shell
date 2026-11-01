@@ -20,6 +20,7 @@ class VayliIslandApp {
   private clockTimer: number | null = null;
   private metricsTimer: number | null = null;
   private autoSaveTimer: number | null = null;
+  private fullscreenCheckTimer: number | null = null;
   private isSavingSnapshot = false;
   private activityTimers: Map<string, number> = new Map();
 
@@ -27,6 +28,7 @@ class VayliIslandApp {
   private settings: ObsidianSettings = {
     autoCollapseOnLeave: true,
     restoreSessionOnStartup: true,
+    showOverFullscreen: false,
     collapsedWidget: "pty_status",
     clock24h: true,
     accentColor: "#FF6B00",
@@ -68,6 +70,7 @@ class VayliIslandApp {
   private toggleAutoCollapse!: HTMLInputElement;
   private toggleAutostart!: HTMLInputElement;
   private toggleRestoreSession!: HTMLInputElement;
+  private toggleShowOverFullscreen!: HTMLInputElement;
   private inputAccentPicker!: HTMLInputElement;
   private selectCollapsedWidget!: HTMLSelectElement;
   private settingClockRow!: HTMLElement;
@@ -117,6 +120,9 @@ class VayliIslandApp {
 
     // Set initial collapsed geometry
     await this.setMode("collapsed");
+
+    // Iniciar chequeo periódico de oclusión sobre aplicaciones en pantalla completa
+    this.startFullscreenCheckLoop();
   }
 
   private cacheDom() {
@@ -156,6 +162,7 @@ class VayliIslandApp {
     this.toggleAutoCollapse = document.getElementById("toggle-auto-collapse") as HTMLInputElement;
     this.toggleAutostart = document.getElementById("toggle-autostart") as HTMLInputElement;
     this.toggleRestoreSession = document.getElementById("toggle-restore-session") as HTMLInputElement;
+    this.toggleShowOverFullscreen = document.getElementById("toggle-show-over-fullscreen") as HTMLInputElement;
     this.inputAccentPicker = document.getElementById("input-accent-picker") as HTMLInputElement;
     this.selectCollapsedWidget = document.getElementById("select-collapsed-widget") as HTMLSelectElement;
     this.settingClockRow = document.getElementById("setting-clock-row")!;
@@ -199,6 +206,14 @@ class VayliIslandApp {
     if (this.toggleRestoreSession) {
       this.toggleRestoreSession.checked = this.settings.restoreSessionOnStartup;
     }
+    if (this.toggleShowOverFullscreen) {
+      this.toggleShowOverFullscreen.checked = this.settings.showOverFullscreen ?? false;
+    }
+    try {
+      await invoke("set_show_over_fullscreen", { enabled: !!this.settings.showOverFullscreen });
+    } catch (err) {
+      console.debug("Error al sincronizar visibilidad sobre pantalla completa inicial:", err);
+    }
     if (this.selectCollapsedWidget) {
       this.selectCollapsedWidget.value = this.settings.collapsedWidget;
     }
@@ -227,6 +242,22 @@ class VayliIslandApp {
     } catch (e) {
       console.warn("Failed to persist settings in localStorage:", e);
     }
+  }
+
+  private startFullscreenCheckLoop() {
+    if (this.fullscreenCheckTimer) {
+      clearInterval(this.fullscreenCheckTimer);
+    }
+    this.fullscreenCheckTimer = window.setInterval(async () => {
+      // Chequeo ligero solo si la opción de mostrar sobre pantalla completa está desactivada (false)
+      if (!this.settings.showOverFullscreen) {
+        try {
+          await invoke("check_fullscreen_occlusion");
+        } catch {
+          // Ignorar si la ventana no está disponible o en transición
+        }
+      }
+    }, 1000);
   }
 
   public applyAccentColor(hex: string) {
@@ -655,6 +686,18 @@ class VayliIslandApp {
         this.scheduleAutoSave();
       }
     });
+
+    if (this.toggleShowOverFullscreen) {
+      this.toggleShowOverFullscreen.addEventListener("change", async () => {
+        this.settings.showOverFullscreen = this.toggleShowOverFullscreen.checked;
+        this.saveSettings();
+        try {
+          await invoke("set_show_over_fullscreen", { enabled: this.settings.showOverFullscreen });
+        } catch (err) {
+          console.error("Error al actualizar visibilidad sobre pantalla completa:", err);
+        }
+      });
+    }
 
     // Escuchar solicitud de salida del System Tray
     listen("tray-quit-requested", async () => {

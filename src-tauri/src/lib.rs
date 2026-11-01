@@ -152,9 +152,33 @@ fn set_island_state(
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
+        let _ = window.set_always_on_top(true);
+    } else {
+        let _ = window::handle_fullscreen_visibility(&window, state);
     }
     let _ = window.emit("island-state-changed", state);
     Ok(())
+}
+
+#[tauri::command]
+fn set_show_over_fullscreen(
+    window: WebviewWindow,
+    state_holder: State<IslandStateHolder>,
+    enabled: bool,
+) -> Result<(), String> {
+    window::set_show_over_fullscreen_state(enabled);
+    let state = *state_holder.0.lock();
+    window::handle_fullscreen_visibility(&window, state)?;
+    Ok(())
+}
+
+#[tauri::command]
+fn check_fullscreen_occlusion(
+    window: WebviewWindow,
+    state_holder: State<IslandStateHolder>,
+) -> Result<bool, String> {
+    let state = *state_holder.0.lock();
+    window::handle_fullscreen_visibility(&window, state)
 }
 
 #[tauri::command]
@@ -213,6 +237,9 @@ pub fn run() {
                                 let _ = window.show();
                                 let _ = window.unminimize();
                                 let _ = window.set_focus();
+                                let _ = window.set_always_on_top(true);
+                            } else {
+                                let _ = window::handle_fullscreen_visibility(&window, next);
                             }
                             let _ = window.emit("island-state-changed", next);
                         }
@@ -274,6 +301,9 @@ pub fn run() {
                                     let _ = window.show();
                                     let _ = window.unminimize();
                                     let _ = window.set_focus();
+                                    let _ = window.set_always_on_top(true);
+                                } else {
+                                    let _ = window::handle_fullscreen_visibility(&window, next);
                                 }
                                 let _ = window.emit("island-state-changed", next);
                             }
@@ -329,6 +359,9 @@ pub fn run() {
                                 let _ = window.show();
                                 let _ = window.unminimize();
                                 let _ = window.set_focus();
+                                let _ = window.set_always_on_top(true);
+                            } else {
+                                let _ = window::handle_fullscreen_visibility(&window, next);
                             }
                             let _ = window.emit("island-state-changed", next);
                         }
@@ -355,6 +388,8 @@ pub fn run() {
             quit_app_immediately,
             set_island_state,
             get_island_state,
+            set_show_over_fullscreen,
+            check_fullscreen_occlusion,
             switch_to_next_monitor,
             center_island,
             get_system_metrics

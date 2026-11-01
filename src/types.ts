@@ -10,6 +10,7 @@ export type CollapsedWidgetType = "pty_status" | "clock" | "system_metrics" | "l
 export interface ObsidianSettings {
   autoCollapseOnLeave: boolean;
   restoreSessionOnStartup: boolean;
+  showOverFullscreen: boolean;
   collapsedWidget: CollapsedWidgetType;
   clock24h: boolean;
   accentColor: string;

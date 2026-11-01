@@ -1,8 +1,17 @@
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use tauri::{PhysicalPosition, PhysicalSize, WebviewWindow};
 
 static CURRENT_MONITOR_INDEX: AtomicUsize = AtomicUsize::new(0);
+pub static SHOW_OVER_FULLSCREEN: AtomicBool = AtomicBool::new(false);
+
+pub fn is_show_over_fullscreen() -> bool {
+    SHOW_OVER_FULLSCREEN.load(Ordering::SeqCst)
+}
+
+pub fn set_show_over_fullscreen_state(enabled: bool) {
+    SHOW_OVER_FULLSCREEN.store(enabled, Ordering::SeqCst);
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -81,4 +90,142 @@ pub fn switch_monitor(window: &WebviewWindow, state: IslandState) -> Result<usiz
     let next = (current + 1) % monitors.len();
     update_island_geometry_on_monitor(window, state, Some(next))?;
     Ok(next)
+}
+
+#[cfg(target_os = "windows")]
+pub fn is_foreground_window_fullscreen(window: &WebviewWindow) -> bool {
+    use windows_sys::Win32::Foundation::{HWND, RECT};
+    use windows_sys::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    };
+    use windows_sys::Win32::System::Threading::GetCurrentProcessId;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetClassNameW, GetDesktopWindow, GetForegroundWindow, GetShellWindow, GetWindowRect,
+        GetWindowThreadProcessId, IsWindowVisible,
+    };
+
+    let fg_hwnd = unsafe { GetForegroundWindow() };
+    if fg_hwnd.is_null() {
+        return false;
+    }
+
+    if unsafe { IsWindowVisible(fg_hwnd) } == 0 {
+        return false;
+    }
+
+    // Ignore our own window
+    let our_hwnd = match window.hwnd() {
+        Ok(h) => h.0 as HWND,
+        Err(_) => return false,
+    };
+    if fg_hwnd == our_hwnd {
+        return false;
+    }
+
+    // Ignore our own process
+    let mut fg_pid: u32 = 0;
+    unsafe { GetWindowThreadProcessId(fg_hwnd, &mut fg_pid) };
+    let our_pid = unsafe { GetCurrentProcessId() };
+    if fg_pid == 0 || fg_pid == our_pid {
+        return false;
+    }
+
+    // Ignore desktop and system shell windows
+    let desktop_hwnd = unsafe { GetDesktopWindow() };
+    if fg_hwnd == desktop_hwnd {
+        return false;
+    }
+
+    let shell_hwnd = unsafe { GetShellWindow() };
+    if fg_hwnd == shell_hwnd {
+        return false;
+    }
+
+    let mut class_name = [0u16; 256];
+    let len = unsafe { GetClassNameW(fg_hwnd, class_name.as_mut_ptr(), class_name.len() as i32) };
+    if len > 0 {
+        let class_str = String::from_utf16_lossy(&class_name[..len as usize]);
+        if class_str == "Progman" || class_str == "WorkerW" || class_str == "Shell_TrayWnd" {
+            return false;
+        }
+    }
+
+    // Check monitors: both must be on the same monitor
+    let fg_monitor = unsafe { MonitorFromWindow(fg_hwnd, MONITOR_DEFAULTTONEAREST) };
+    let our_monitor = unsafe { MonitorFromWindow(our_hwnd, MONITOR_DEFAULTTONEAREST) };
+    if fg_monitor.is_null() || fg_monitor != our_monitor {
+        return false;
+    }
+
+    // Check window rectangle vs monitor full rectangle
+    let mut fg_rect = RECT {
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+    };
+    if unsafe { GetWindowRect(fg_hwnd, &mut fg_rect) } == 0 {
+        return false;
+    }
+
+    let mut mi = MONITORINFO {
+        cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+        rcMonitor: RECT {
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        },
+        rcWork: RECT {
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        },
+        dwFlags: 0,
+    };
+    if unsafe { GetMonitorInfoW(fg_monitor, &mut mi) } == 0 {
+        return false;
+    }
+
+    // A window is considered fullscreen if it covers the entire monitor rect
+    fg_rect.left <= mi.rcMonitor.left
+        && fg_rect.top <= mi.rcMonitor.top
+        && fg_rect.right >= mi.rcMonitor.right
+        && fg_rect.bottom >= mi.rcMonitor.bottom
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn is_foreground_window_fullscreen(_window: &WebviewWindow) -> bool {
+    false
+}
+
+pub fn handle_fullscreen_visibility(
+    window: &WebviewWindow,
+    current_state: IslandState,
+) -> Result<bool, String> {
+    let is_fullscreen = is_foreground_window_fullscreen(window);
+    let show_over = is_show_over_fullscreen();
+
+    if show_over {
+        // En modo "Mostrar sobre pantalla completa", garantizar que esté visible y en el tope
+        let _ = window.show();
+        let _ = window.set_always_on_top(true);
+    } else {
+        // En modo "Ocultar sobre pantalla completa"
+        if is_fullscreen {
+            if current_state == IslandState::Collapsed || current_state == IslandState::Glance {
+                let _ = window.hide();
+            }
+        } else {
+            // No hay app en pantalla completa en este monitor: restaurar visibilidad
+            let is_visible = window.is_visible().unwrap_or(false);
+            if !is_visible {
+                let _ = window.show();
+                let _ = window.set_always_on_top(true);
+            }
+        }
+    }
+
+    Ok(is_fullscreen)
 }
