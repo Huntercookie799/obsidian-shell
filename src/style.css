@@ -1611,3 +1611,168 @@ html, body {
   color: var(--vayli-accent-primary);
   filter: drop-shadow(0 0 6px var(--vayli-accent-glow));
 }
+
+/* Folder Selection & Recent Directories Popover (Fase 29) */
+.folder-menu-popover {
+  position: absolute;
+  top: 44px;
+  right: 12px;
+  width: 320px;
+  max-height: 440px;
+  background: #16161B;
+  border: 1px solid #2B2B33;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+  padding: 10px;
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+}
+
+.folder-menu-popover.hidden {
+  display: none;
+}
+
+.folder-browse-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.folder-icon {
+  font-size: 13px;
+}
+
+.menu-shortcut-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 5px;
+  background: #252530;
+  border-radius: 4px;
+  color: var(--vayli-text-muted);
+  margin-left: auto;
+}
+
+.recent-folders-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #27272E transparent;
+  padding-right: 2px;
+}
+
+.recent-folder-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #1C1C23;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 140ms ease;
+  position: relative;
+}
+
+.recent-folder-item:hover {
+  background: #252530;
+  border-color: var(--vayli-accent-primary);
+}
+
+.recent-folder-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.recent-folder-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.recent-folder-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vayli-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-folder-path {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--vayli-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.recent-folder-remove {
+  background: transparent;
+  border: none;
+  color: var(--vayli-text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  opacity: 0.5;
+  transition: opacity 120ms ease, color 120ms ease;
+  flex-shrink: 0;
+}
+
+.recent-folder-remove:hover {
+  opacity: 1;
+  color: var(--vayli-status-error);
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.recent-folders-empty {
+  font-size: 11px;
+  color: var(--vayli-text-muted);
+  text-align: center;
+  padding: 16px 8px;
+  font-style: italic;
+}
+
+.setting-actions-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.setting-action-button {
+  background: #202028;
+  border: 1px solid #2F2F3D;
+  color: var(--vayli-text-primary);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.setting-action-button:hover {
+  background: #2A2A36;
+  border-color: var(--vayli-accent-primary);
+}
+
+.setting-action-button.danger {
+  color: #F87171;
+}
+
+.setting-action-button.danger:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #EF4444;
+}

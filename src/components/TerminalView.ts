@@ -405,6 +405,15 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
       return false;
     }
 
+    // Intercept Ctrl+O to open folder selector and recent directories menu
+    if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.code === "KeyO") {
+      if (event.type === "keydown") {
+        event.preventDefault();
+        window.dispatchEvent(new CustomEvent("vayli:toggle-folder-menu"));
+      }
+      return false;
+    }
+
     // Intercept Ctrl+Tab and Ctrl+Shift+Tab to cycle tabs instead of typing tab in terminal
     if ((event.ctrlKey || event.metaKey) && (event.key === "Tab" || event.code === "Tab")) {
       if (event.type === "keydown") {

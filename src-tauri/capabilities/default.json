@@ -13,6 +13,8 @@
     "global-shortcut:allow-unregister",
     "updater:default",
     "process:allow-restart",
-    "autostart:default"
+    "autostart:default",
+    "dialog:default",
+    "dialog:allow-open"
   ]
 }

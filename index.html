@@ -100,6 +100,12 @@
                 <line x1="3" y1="12" x2="21" y2="12"/>
               </svg>
             </button>
+            <!-- Open Folder / Recent Directories (Ctrl+O) -->
+            <button class="action-btn" id="btn-folder-menu" title="Abrir carpeta o recientes (Ctrl+O)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+              </svg>
+            </button>
             <!-- Quick Shell / Agent Launcher -->
             <button class="action-btn" id="btn-shell-menu" title="Lanzador rápido de shells (Ctrl+Shift+T)">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -196,6 +202,23 @@
           <div class="menu-footer">
             <span class="menu-version-text" id="popover-version-text">ObsidianShell v0.5.0</span>
             <button class="menu-update-btn" id="btn-popover-update" title="Buscar actualizaciones">Buscar Actualizaciones</button>
+          </div>
+        </div>
+
+        <!-- Folder Selection & Recent Directories Popover -->
+        <div id="folder-menu-popover" class="folder-menu-popover hidden">
+          <div class="menu-header">Directorios y Proyectos</div>
+          <div class="menu-items">
+            <button class="menu-item folder-browse-item" id="btn-browse-folder">
+              <span class="menu-item-icon folder-icon">📁</span>
+              <span class="menu-item-name">Abrir carpeta...</span>
+              <span class="menu-shortcut-badge">Ctrl+O</span>
+            </button>
+          </div>
+
+          <div class="menu-header" style="margin-top: 8px;">Carpetas Recientes</div>
+          <div id="recent-folders-container" class="recent-folders-container">
+            <!-- Dynamically populated from obsidian_settings.recentFolders -->
           </div>
         </div>
 
@@ -334,6 +357,17 @@
               <input type="checkbox" id="toggle-clock-24h" checked />
               <span class="toggle-slider"></span>
             </label>
+          </div>
+
+          <div class="setting-item column" id="setting-recent-folders-section">
+            <div class="setting-text">
+              <span class="setting-title">Carpetas recientes</span>
+              <span class="setting-subtitle">Historial de directorios de trabajo</span>
+            </div>
+            <div class="setting-actions-row">
+              <button type="button" class="setting-action-button" id="btn-settings-open-folder">Abrir carpeta...</button>
+              <button type="button" class="setting-action-button danger" id="btn-settings-clear-folders">Limpiar</button>
+            </div>
           </div>
         </div>
       </main>

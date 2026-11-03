@@ -39,6 +39,7 @@ export interface ObsidianSettings {
   dockPosition?: DockPosition;
   expandedWidth?: number;
   expandedHeight?: number;
+  recentFolders?: string[];
 }
 
 export interface SystemMetrics {

@@ -1,10 +1,67 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { isEnabled as isAutostartEnabled, enable as enableAutostart, disable as disableAutostart } from "@tauri-apps/plugin-autostart";
 import { createTerminalInstance, fitSafely, hexToRgb, setInitialDimensions, stripAnsi, updateTerminalAccentTheme } from "./components/TerminalView";
 import { CollapsedWidgetType, CustomProfile, DockPosition, IslandMode, MonitorInfo, ObsidianSettings, PtyStatus, SessionSnapshot, SnapshotPane, SnapshotTab, SystemMetrics, TerminalPane, TerminalTab } from "./types";
 import { updateManager } from "./updater/UpdateManager";
 import { CliActivityTracker, CliNotificationEvent, extractCleanSnippet, playNotificationSound } from "./utils/cliNotifications";
+
+/**
+ * Diálogo nativo de selección de carpetas con Tauri (Fase 29)
+ */
+export async function promptOpenFolder(): Promise<string | null> {
+  try {
+    const selected = await openDialog({
+      directory: true,
+      multiple: false,
+      title: "Seleccionar carpeta para terminal",
+    });
+
+    if (!selected) return null;
+    if (Array.isArray(selected)) {
+      return selected.length > 0 ? selected[0] : null;
+    }
+    return selected;
+  } catch (err) {
+    console.error("[Dialog] Error al abrir diálogo de selección de carpeta:", err);
+    return null;
+  }
+}
+
+/**
+ * Recorta rutas largas anteponiendo puntos suspensivos para no desbordar la interfaz
+ */
+export function formatPathSnippet(fullPath: string, maxLength = 36): string {
+  if (!fullPath) return "";
+  if (fullPath.length <= maxLength) return fullPath;
+
+  const sep = fullPath.includes("\\") ? "\\" : "/";
+  const parts = fullPath.split(/[/\\]/).filter(Boolean);
+
+  if (parts.length <= 1) {
+    return "…" + fullPath.slice(-maxLength + 1);
+  }
+
+  const base = parts[parts.length - 1];
+  const parent = parts[parts.length - 2];
+  const candidate = `…${sep}${parent}${sep}${base}`;
+
+  if (candidate.length <= maxLength) {
+    let result = candidate;
+    for (let i = parts.length - 3; i >= 0; i--) {
+      const nextCandidate = `…${sep}${parts[i]}${sep}` + result.slice(2);
+      if (nextCandidate.length <= maxLength) {
+        result = nextCandidate;
+      } else {
+        break;
+      }
+    }
+    return result;
+  }
+
+  return "…" + fullPath.slice(-maxLength + 1);
+}
 
 class VayliIslandApp {
   private currentMode: IslandMode = "collapsed";
@@ -39,6 +96,7 @@ class VayliIslandApp {
     accentColor: "#FF6B00",
     cliNotifications: true,
     notificationSound: true,
+    recentFolders: [],
   };
   private customProfiles: CustomProfile[] = [];
 
@@ -61,6 +119,7 @@ class VayliIslandApp {
   private viewportEl!: HTMLElement;
   private btnAddTab!: HTMLButtonElement;
   private btnCollapse!: HTMLButtonElement;
+  private btnFolderMenu!: HTMLButtonElement;
   private btnShellMenu!: HTMLButtonElement;
   private btnSettings!: HTMLButtonElement;
   private btnToggleSearch!: HTMLButtonElement;
@@ -76,6 +135,11 @@ class VayliIslandApp {
 
   // Popover, Profile & Settings DOM
   private shellMenuPopover!: HTMLElement;
+  private folderMenuPopover!: HTMLElement;
+  private btnBrowseFolder!: HTMLButtonElement;
+  private recentFoldersContainer!: HTMLElement;
+  private btnSettingsOpenFolder: HTMLButtonElement | null = null;
+  private btnSettingsClearFolders: HTMLButtonElement | null = null;
   private settingsPopover!: HTMLElement;
   private toggleAutoCollapse!: HTMLInputElement;
   private toggleAutostart!: HTMLInputElement;
@@ -166,6 +230,7 @@ class VayliIslandApp {
     this.viewportEl = document.getElementById("terminal-viewport")!;
     this.btnAddTab = document.getElementById("btn-add-tab") as HTMLButtonElement;
     this.btnCollapse = document.getElementById("btn-collapse") as HTMLButtonElement;
+    this.btnFolderMenu = document.getElementById("btn-folder-menu") as HTMLButtonElement;
     this.btnShellMenu = document.getElementById("btn-shell-menu") as HTMLButtonElement;
     this.btnSettings = document.getElementById("btn-settings") as HTMLButtonElement;
     this.btnToggleSearch = document.getElementById("btn-toggle-search") as HTMLButtonElement;
@@ -179,8 +244,13 @@ class VayliIslandApp {
     this.btnSearchNext = document.getElementById("btn-search-next") as HTMLButtonElement;
     this.btnSearchClose = document.getElementById("btn-search-close") as HTMLButtonElement;
 
-    // Shell & Profiles & Settings Popovers
+    // Shell, Folder & Profiles & Settings Popovers
     this.shellMenuPopover = document.getElementById("shell-menu-popover")!;
+    this.folderMenuPopover = document.getElementById("folder-menu-popover")!;
+    this.btnBrowseFolder = document.getElementById("btn-browse-folder") as HTMLButtonElement;
+    this.recentFoldersContainer = document.getElementById("recent-folders-container")!;
+    this.btnSettingsOpenFolder = document.getElementById("btn-settings-open-folder") as HTMLButtonElement | null;
+    this.btnSettingsClearFolders = document.getElementById("btn-settings-clear-folders") as HTMLButtonElement | null;
     this.settingsPopover = document.getElementById("settings-popover")!;
     this.toggleAutoCollapse = document.getElementById("toggle-auto-collapse") as HTMLInputElement;
     this.toggleAutostart = document.getElementById("toggle-autostart") as HTMLInputElement;
@@ -253,6 +323,11 @@ class VayliIslandApp {
     if (this.toggleNotificationSound) {
       this.toggleNotificationSound.checked = this.settings.notificationSound !== false;
     }
+
+    if (!Array.isArray(this.settings.recentFolders)) {
+      this.settings.recentFolders = [];
+    }
+    this.renderRecentFoldersList();
 
     try {
       const autostart = await isAutostartEnabled();
@@ -566,6 +641,139 @@ class VayliIslandApp {
     });
   }
 
+  // ─── Gestión de Carpetas Recientes e Historial (Fase 29) ───
+
+  public toggleFolderMenu() {
+    if (this.currentMode !== "expanded") {
+      this.setMode("expanded").then(() => {
+        this.shellMenuPopover.classList.add("hidden");
+        this.settingsPopover.classList.add("hidden");
+        this.folderMenuPopover.classList.remove("hidden");
+      });
+    } else {
+      this.shellMenuPopover.classList.add("hidden");
+      this.settingsPopover.classList.add("hidden");
+      this.folderMenuPopover.classList.toggle("hidden");
+    }
+  }
+
+  public async triggerBrowseFolder() {
+    const selected = await promptOpenFolder();
+    if (selected) {
+      await this.openFolderInTerminal(selected);
+    }
+  }
+
+  public addRecentFolder(folderPath: string) {
+    if (!folderPath) return;
+    const clean = folderPath.trim();
+    if (!clean) return;
+
+    if (!Array.isArray(this.settings.recentFolders)) {
+      this.settings.recentFolders = [];
+    }
+
+    const isWin = navigator.platform.includes("Win");
+    const target = isWin ? clean.toLowerCase() : clean;
+
+    this.settings.recentFolders = this.settings.recentFolders.filter((f) => {
+      const norm = isWin ? f.toLowerCase() : f;
+      return norm !== target;
+    });
+
+    this.settings.recentFolders.unshift(clean);
+
+    if (this.settings.recentFolders.length > 10) {
+      this.settings.recentFolders = this.settings.recentFolders.slice(0, 10);
+    }
+
+    this.saveSettings();
+    this.renderRecentFoldersList();
+  }
+
+  public removeRecentFolder(folderPath: string) {
+    if (!this.settings.recentFolders) return;
+    this.settings.recentFolders = this.settings.recentFolders.filter((f) => f !== folderPath);
+    this.saveSettings();
+    this.renderRecentFoldersList();
+  }
+
+  public clearRecentFolders() {
+    this.settings.recentFolders = [];
+    this.saveSettings();
+    this.renderRecentFoldersList();
+  }
+
+  public renderRecentFoldersList() {
+    if (!this.recentFoldersContainer) return;
+    this.recentFoldersContainer.innerHTML = "";
+
+    const folders = this.settings.recentFolders || [];
+    if (folders.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "recent-folders-empty";
+      empty.textContent = "Sin carpetas recientes";
+      this.recentFoldersContainer.appendChild(empty);
+      return;
+    }
+
+    folders.forEach((fPath) => {
+      const item = document.createElement("div");
+      item.className = "recent-folder-item";
+      item.title = fPath;
+
+      const icon = document.createElement("span");
+      icon.className = "recent-folder-icon";
+      icon.textContent = "📁";
+
+      const info = document.createElement("div");
+      info.className = "recent-folder-info";
+
+      const name = document.createElement("span");
+      name.className = "recent-folder-name";
+      const parts = fPath.split(/[/\\]/).filter(Boolean);
+      name.textContent = parts[parts.length - 1] || fPath;
+
+      const pathEl = document.createElement("span");
+      pathEl.className = "recent-folder-path";
+      pathEl.textContent = formatPathSnippet(fPath, 34);
+
+      info.appendChild(name);
+      info.appendChild(pathEl);
+
+      const delBtn = document.createElement("button");
+      delBtn.className = "recent-folder-remove";
+      delBtn.innerHTML = "&times;";
+      delBtn.title = "Eliminar del historial";
+      delBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.removeRecentFolder(fPath);
+      });
+
+      item.appendChild(icon);
+      item.appendChild(info);
+      item.appendChild(delBtn);
+
+      item.addEventListener("click", async () => {
+        this.folderMenuPopover.classList.add("hidden");
+        await this.openFolderInTerminal(fPath);
+      });
+
+      this.recentFoldersContainer.appendChild(item);
+    });
+  }
+
+  public async openFolderInTerminal(folderPath: string) {
+    if (!folderPath) return;
+    this.addRecentFolder(folderPath);
+
+    if (this.currentMode !== "expanded") {
+      await this.setMode("expanded");
+    }
+
+    await this.createTab(undefined, folderPath);
+  }
+
   private async initUpdater() {
     await updateManager.init();
 
@@ -779,16 +987,48 @@ class VayliIslandApp {
     this.btnVersionBadge.addEventListener("click", onUpdateTrigger);
     this.btnPopoverUpdate.addEventListener("click", onUpdateTrigger);
 
-    // 6. Shell Selection & Profile Creation
+    // 6. Shell, Folder & Settings Interactions
+    this.btnFolderMenu.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.toggleFolderMenu();
+    });
+
+    this.btnBrowseFolder.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.folderMenuPopover.classList.add("hidden");
+      this.triggerBrowseFolder();
+    });
+
+    if (this.btnSettingsOpenFolder) {
+      this.btnSettingsOpenFolder.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.settingsPopover.classList.add("hidden");
+        this.triggerBrowseFolder();
+      });
+    }
+
+    if (this.btnSettingsClearFolders) {
+      this.btnSettingsClearFolders.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.clearRecentFolders();
+      });
+    }
+
+    this.folderMenuPopover.addEventListener("click", (e) => {
+      e.stopPropagation();
+    });
+
     this.btnShellMenu.addEventListener("click", (e) => {
       e.stopPropagation();
       this.settingsPopover.classList.add("hidden");
+      this.folderMenuPopover.classList.add("hidden");
       this.shellMenuPopover.classList.toggle("hidden");
     });
 
     this.btnSettings.addEventListener("click", (e) => {
       e.stopPropagation();
       this.shellMenuPopover.classList.add("hidden");
+      this.folderMenuPopover.classList.add("hidden");
       this.settingsPopover.classList.toggle("hidden");
       if (!this.settingsPopover.classList.contains("hidden")) {
         this.refreshMonitorsList();
@@ -1034,6 +1274,7 @@ class VayliIslandApp {
 
     document.addEventListener("click", () => {
       this.shellMenuPopover.classList.add("hidden");
+      this.folderMenuPopover.classList.add("hidden");
       this.settingsPopover.classList.add("hidden");
     });
 
@@ -1055,6 +1296,11 @@ class VayliIslandApp {
     // Custom event dispatched from Xterm (Ctrl+W)
     window.addEventListener("vayli:close-active-pane", () => {
       this.closeActivePaneOrTab();
+    });
+
+    // Custom event dispatched from Xterm (Ctrl+O)
+    window.addEventListener("vayli:toggle-folder-menu", () => {
+      this.toggleFolderMenu();
     });
 
     // Custom event dispatched from Xterm (Ctrl+Tab / Ctrl+Shift+Tab)
@@ -1099,6 +1345,13 @@ class VayliIslandApp {
         if (!this.settingsPopover.classList.contains("hidden")) {
           e.preventDefault();
           this.settingsPopover.classList.add("hidden");
+          const activePane = this.getActivePane();
+          if (activePane) activePane.terminal.focus();
+          return;
+        }
+        if (!this.folderMenuPopover.classList.contains("hidden")) {
+          e.preventDefault();
+          this.folderMenuPopover.classList.add("hidden");
           const activePane = this.getActivePane();
           if (activePane) activePane.terminal.focus();
           return;
@@ -1165,6 +1418,13 @@ class VayliIslandApp {
         return;
       }
 
+      // Ctrl+O: Selector y Menú de Carpetas Recientes (Fase 29)
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        this.toggleFolderMenu();
+        return;
+      }
+
       // Ctrl+T: New Tab
       if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === "t") {
         e.preventDefault();
@@ -1199,7 +1459,7 @@ class VayliIslandApp {
       const target = e.target as HTMLElement;
       if (
         target.closest(
-          "button, input, select, .tab-item, .tab-close-btn, .shell-menu-popover, .settings-popover, .terminal-search-bar, .resize-handle"
+          "button, input, select, .tab-item, .tab-close-btn, .shell-menu-popover, .folder-menu-popover, .settings-popover, .terminal-search-bar, .resize-handle"
         )
       ) {
         return;
@@ -1426,6 +1686,7 @@ class VayliIslandApp {
 
     if (mode !== "expanded") {
       this.shellMenuPopover.classList.add("hidden");
+      this.folderMenuPopover.classList.add("hidden");
       this.settingsPopover.classList.add("hidden");
       this.closeSearchBar();
     }
@@ -1453,11 +1714,12 @@ class VayliIslandApp {
     containerEl.id = `container-${tabId}`;
     this.viewportEl.appendChild(containerEl);
 
-    const defaultTitle = shellPath
+    const folderName = cwd ? cwd.split(/[/\\]/).filter(Boolean).pop() : undefined;
+    const defaultTitle = folderName || (shellPath
       ? shellPath.split(/[/\\]/).pop() || shellPath
       : navigator.platform.includes("Win")
         ? "powershell"
-        : "bash";
+        : "bash");
 
     const tab: TerminalTab = {
       id: tabId,
