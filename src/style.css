@@ -2,8 +2,12 @@
   --accent-color: #FF6B00;
   --accent-rgb: 255, 107, 0;
 
+  --terminal-opacity: 1.0;
+  --terminal-bg-blur: 0px;
+  --terminal-bg-image: none;
+
   --vayli-bg-pill: #080808;
-  --vayli-bg-expanded: #0D0D0F;
+  --vayli-bg-expanded: rgba(13, 13, 15, var(--terminal-opacity, 1.0));
   --vayli-accent-primary: var(--accent-color);
   --vayli-accent-hover: var(--accent-color);
   --vayli-accent-glow: rgba(var(--accent-rgb), 0.4);
@@ -804,11 +808,31 @@ html, body {
   width: 100%;
   height: calc(100% - 38px);
   position: relative;
-  background: #0D0D0F;
+  background: transparent;
   overflow: hidden;
   min-height: 0;
   min-width: 0;
   box-sizing: border-box;
+}
+
+#terminal-workspace::before,
+.terminal-viewport::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: var(--terminal-bg-image, none);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: blur(var(--terminal-bg-blur, 0px));
+  transform: scale(1.05);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.95;
+  transition: opacity 200ms ease;
 }
 
 .split-container,
@@ -826,6 +850,7 @@ html, body {
   min-width: 0;
   overflow: hidden;
   box-sizing: border-box;
+  z-index: 1;
 }
 
 .tab-panes-container.active {
@@ -860,10 +885,45 @@ html, body {
   overflow: hidden;
   box-sizing: border-box;
   padding-bottom: 6px;
-  background: #0D0D0F;
-  border: 1px solid #1C1C24;
+  background: transparent;
+  backdrop-filter: blur(var(--terminal-bg-blur, 0px));
+  -webkit-backdrop-filter: blur(var(--terminal-bg-blur, 0px));
+  border: 1px solid rgba(28, 28, 36, 0.8);
   border-radius: 6px;
   transition: border-color 160ms ease, box-shadow 160ms ease;
+  z-index: 1;
+}
+
+/* Pseudo-elemento para wallpaper individual por panel */
+.terminal-pane::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: var(--terminal-bg-image, none);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: blur(var(--terminal-bg-blur, 0px));
+  transform: scale(1.04);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Capa de oscurecimiento con opacidad regulable para contraste y legibilidad perfecta del texto */
+.terminal-pane::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(13, 13, 15, var(--terminal-opacity, 1));
+  pointer-events: none;
+  z-index: 1;
+  transition: background 150ms ease;
 }
 
 .terminal-pane.active-pane {
@@ -933,6 +993,8 @@ html, body {
 .terminal-pane .xterm,
 .terminal-instance .xterm,
 .xterm {
+  position: relative;
+  z-index: 2;
   height: 100% !important;
   max-height: 100% !important;
   width: 100% !important;
@@ -1775,4 +1837,95 @@ html, body {
 .setting-action-button.danger:hover {
   background: rgba(239, 68, 68, 0.15);
   border-color: #EF4444;
+}
+
+/* ─── Apariencia y Fondo Personalizado (Fase 30) ─── */
+.setting-slider-group,
+.setting-wallpaper-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.setting-slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.slider-label {
+  color: var(--vayli-text-primary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.slider-value {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--vayli-accent-primary);
+  font-weight: 600;
+}
+
+.setting-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 5px;
+  border-radius: 9999px;
+  background: #272732;
+  outline: none;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.setting-range:hover {
+  background: #333342;
+}
+
+.setting-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--vayli-accent-primary);
+  box-shadow: 0 0 6px var(--vayli-accent-glow);
+  cursor: pointer;
+  transition: transform 120ms ease, background 120ms ease;
+}
+
+.setting-range::-webkit-slider-thumb:hover {
+  transform: scale(1.18);
+}
+
+.setting-range::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--vayli-accent-primary);
+  box-shadow: 0 0 6px var(--vayli-accent-glow);
+  cursor: pointer;
+  border: none;
+  transition: transform 120ms ease, background 120ms ease;
+}
+
+.setting-range::-moz-range-thumb:hover {
+  transform: scale(1.18);
+}
+
+.wallpaper-status-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--vayli-text-muted);
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wallpaper-status-badge.active {
+  color: var(--vayli-status-success);
+  font-weight: 600;
 }

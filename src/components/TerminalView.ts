@@ -9,7 +9,7 @@ import { invoke } from "@tauri-apps/api/core";
 import "@xterm/xterm/css/xterm.css";
 
 export const VAYLI_THEME = {
-  background: "#0D0D0F",
+  background: "transparent",
   foreground: "#F4F4F6",
   cursor: "#FF6B00",
   cursorAccent: "#0D0D0F",
@@ -65,6 +65,16 @@ export function updateTerminalAccentTheme(terminal: Terminal, hex: string) {
     cursor: hex,
     selectionBackground: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.25)`,
     selectionInactiveBackground: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15)`,
+  };
+}
+
+/**
+ * Actualiza el fondo de Xterm en caliente si se requiere transparencia o fondo personalizado
+ */
+export function updateTerminalBackground(terminal: Terminal, bg: string = "transparent") {
+  terminal.options.theme = {
+    ...terminal.options.theme,
+    background: bg,
   };
 }
 

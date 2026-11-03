@@ -335,6 +335,45 @@
             </div>
           </div>
 
+          <!-- Sección Apariencia y Fondo (Fase 30) -->
+          <div class="setting-item column" id="setting-appearance-section">
+            <div class="setting-text">
+              <span class="setting-title">Apariencia y Fondo</span>
+              <span class="setting-subtitle">Transparencia, desenfoque y wallpaper de la terminal</span>
+            </div>
+
+            <!-- Opacidad del fondo -->
+            <div class="setting-slider-group">
+              <div class="setting-slider-header">
+                <span class="slider-label">Opacidad del fondo</span>
+                <span class="slider-value" id="label-terminal-opacity">100%</span>
+              </div>
+              <input type="range" id="input-terminal-opacity" min="0.2" max="1.0" step="0.05" value="1.0" class="setting-range" />
+            </div>
+
+            <!-- Desenfoque del fondo (Blur) -->
+            <div class="setting-slider-group">
+              <div class="setting-slider-header">
+                <span class="slider-label">Desenfoque del fondo (Blur)</span>
+                <span class="slider-value" id="label-terminal-blur">0px</span>
+              </div>
+              <input type="range" id="input-terminal-blur" min="0" max="20" step="1" value="0" class="setting-range" />
+            </div>
+
+            <!-- Imagen de fondo (Wallpaper) -->
+            <div class="setting-wallpaper-group">
+              <div class="setting-slider-header">
+                <span class="slider-label">Imagen de fondo</span>
+                <span class="wallpaper-status-badge" id="label-wallpaper-status">Sin imagen</span>
+              </div>
+              <div class="setting-actions-row">
+                <button type="button" class="setting-action-button" id="btn-select-wallpaper">Elegir imagen...</button>
+                <button type="button" class="setting-action-button danger hidden" id="btn-remove-wallpaper">Quitar imagen</button>
+              </div>
+              <input type="file" id="input-wallpaper-file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" style="display: none;" />
+            </div>
+          </div>
+
           <div class="setting-item column">
             <div class="setting-text">
               <span class="setting-title">Widget en modo píldora</span>

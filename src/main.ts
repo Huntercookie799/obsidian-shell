@@ -1,8 +1,8 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { isEnabled as isAutostartEnabled, enable as enableAutostart, disable as disableAutostart } from "@tauri-apps/plugin-autostart";
-import { createTerminalInstance, fitSafely, hexToRgb, setInitialDimensions, stripAnsi, updateTerminalAccentTheme } from "./components/TerminalView";
+import { createTerminalInstance, fitSafely, hexToRgb, setInitialDimensions, stripAnsi, updateTerminalAccentTheme, updateTerminalBackground } from "./components/TerminalView";
 import { CollapsedWidgetType, CustomProfile, DockPosition, IslandMode, MonitorInfo, ObsidianSettings, PtyStatus, SessionSnapshot, SnapshotPane, SnapshotTab, SystemMetrics, TerminalPane, TerminalTab } from "./types";
 import { updateManager } from "./updater/UpdateManager";
 import { CliActivityTracker, CliNotificationEvent, extractCleanSnippet, playNotificationSound } from "./utils/cliNotifications";
@@ -97,6 +97,9 @@ class VayliIslandApp {
     cliNotifications: true,
     notificationSound: true,
     recentFolders: [],
+    terminalOpacity: 1.0,
+    terminalBlur: 0,
+    terminalWallpaper: undefined,
   };
   private customProfiles: CustomProfile[] = [];
 
@@ -176,6 +179,16 @@ class VayliIslandApp {
   private versionText!: HTMLElement;
   private popoverVersionText!: HTMLElement;
   private btnPopoverUpdate!: HTMLButtonElement;
+
+  // Appearance & Wallpaper DOM (Fase 30)
+  private inputTerminalOpacity!: HTMLInputElement;
+  private labelTerminalOpacity!: HTMLElement;
+  private inputTerminalBlur!: HTMLInputElement;
+  private labelTerminalBlur!: HTMLElement;
+  private btnSelectWallpaper!: HTMLButtonElement;
+  private btnRemoveWallpaper!: HTMLButtonElement;
+  private labelWallpaperStatus!: HTMLElement;
+  private inputWallpaperFile!: HTMLInputElement;
 
   public async init() {
     this.cacheDom();
@@ -286,6 +299,16 @@ class VayliIslandApp {
     this.versionText = document.getElementById("version-text")!;
     this.popoverVersionText = document.getElementById("popover-version-text")!;
     this.btnPopoverUpdate = document.getElementById("btn-popover-update") as HTMLButtonElement;
+
+    // Appearance & Wallpaper DOM (Fase 30)
+    this.inputTerminalOpacity = document.getElementById("input-terminal-opacity") as HTMLInputElement;
+    this.labelTerminalOpacity = document.getElementById("label-terminal-opacity")!;
+    this.inputTerminalBlur = document.getElementById("input-terminal-blur") as HTMLInputElement;
+    this.labelTerminalBlur = document.getElementById("label-terminal-blur")!;
+    this.btnSelectWallpaper = document.getElementById("btn-select-wallpaper") as HTMLButtonElement;
+    this.btnRemoveWallpaper = document.getElementById("btn-remove-wallpaper") as HTMLButtonElement;
+    this.labelWallpaperStatus = document.getElementById("label-wallpaper-status")!;
+    this.inputWallpaperFile = document.getElementById("input-wallpaper-file") as HTMLInputElement;
   }
 
   private async loadSettings() {
@@ -387,6 +410,19 @@ class VayliIslandApp {
       } catch (err) {
         console.debug("Error al sincronizar dimensiones expandidas iniciales:", err);
       }
+    }
+
+    // Restaurar opacidad, desenfoque y wallpaper de la terminal (Fase 30)
+    const opacity = typeof this.settings.terminalOpacity === "number" ? this.settings.terminalOpacity : 1.0;
+    this.applyTerminalOpacity(opacity);
+
+    const blur = typeof this.settings.terminalBlur === "number" ? this.settings.terminalBlur : 0;
+    this.applyTerminalBlur(blur);
+
+    if (this.settings.terminalWallpaper) {
+      await this.setTerminalWallpaper(this.settings.terminalWallpaper);
+    } else {
+      this.clearTerminalWallpaper();
     }
   }
 
@@ -774,6 +810,108 @@ class VayliIslandApp {
     await this.createTab(undefined, folderPath);
   }
 
+  // ─── Personalización de Transparencia Ajustable y Fondo de Pantalla (Fase 30) ───
+
+  public applyTerminalOpacity(opacity: number) {
+    const clamped = Math.max(0.2, Math.min(1.0, opacity));
+    document.documentElement.style.setProperty("--terminal-opacity", clamped.toString());
+    if (this.labelTerminalOpacity) {
+      this.labelTerminalOpacity.textContent = `${Math.round(clamped * 100)}%`;
+    }
+    if (this.inputTerminalOpacity) {
+      this.inputTerminalOpacity.value = clamped.toString();
+    }
+    this.tabs.forEach((tab) => {
+      tab.panes.forEach((pane) => {
+        updateTerminalBackground(pane.terminal, "transparent");
+      });
+    });
+  }
+
+  public applyTerminalBlur(blurPx: number) {
+    const clamped = Math.max(0, Math.min(20, Math.round(blurPx)));
+    document.documentElement.style.setProperty("--terminal-bg-blur", `${clamped}px`);
+    if (this.labelTerminalBlur) {
+      this.labelTerminalBlur.textContent = `${clamped}px`;
+    }
+    if (this.inputTerminalBlur) {
+      this.inputTerminalBlur.value = clamped.toString();
+    }
+  }
+
+  public async setTerminalWallpaper(imagePathOrDataUrl: string, displayName?: string) {
+    if (!imagePathOrDataUrl || !imagePathOrDataUrl.trim()) {
+      this.clearTerminalWallpaper();
+      return;
+    }
+    const clean = imagePathOrDataUrl.trim();
+    let bgUrl: string;
+    if (clean.startsWith("data:") || clean.startsWith("blob:") || clean.startsWith("http://") || clean.startsWith("https://")) {
+      bgUrl = clean;
+    } else {
+      bgUrl = convertFileSrc(clean);
+    }
+
+    document.documentElement.style.setProperty("--terminal-bg-image", `url("${bgUrl}")`);
+    this.settings.terminalWallpaper = clean;
+
+    // Si la opacidad estaba en 1.0 (sólida), atenuarla automáticamente a 0.8 para hacer visible el wallpaper
+    if (this.settings.terminalOpacity === undefined || this.settings.terminalOpacity >= 0.99) {
+      this.settings.terminalOpacity = 0.8;
+      this.applyTerminalOpacity(0.8);
+    }
+
+    const name = displayName || clean.split(/[/\\]/).filter(Boolean).pop() || "Imagen activa";
+    if (this.labelWallpaperStatus) {
+      this.labelWallpaperStatus.textContent = name;
+      this.labelWallpaperStatus.classList.add("active");
+      this.labelWallpaperStatus.title = clean;
+    }
+    if (this.btnRemoveWallpaper) {
+      this.btnRemoveWallpaper.classList.remove("hidden");
+    }
+    this.saveSettings();
+  }
+
+  public clearTerminalWallpaper() {
+    document.documentElement.style.setProperty("--terminal-bg-image", "none");
+    this.settings.terminalWallpaper = undefined;
+    if (this.labelWallpaperStatus) {
+      this.labelWallpaperStatus.textContent = "Sin imagen";
+      this.labelWallpaperStatus.classList.remove("active");
+      this.labelWallpaperStatus.title = "";
+    }
+    if (this.btnRemoveWallpaper) {
+      this.btnRemoveWallpaper.classList.add("hidden");
+    }
+    if (this.inputWallpaperFile) {
+      this.inputWallpaperFile.value = "";
+    }
+    this.saveSettings();
+  }
+
+  public async promptSelectWallpaper() {
+    try {
+      const selected = await openDialog({
+        title: "Seleccionar imagen de fondo para la terminal",
+        multiple: false,
+        directory: false,
+        filters: [
+          {
+            name: "Imágenes (*.png, *.jpg, *.jpeg, *.webp, *.gif, *.bmp)",
+            extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"],
+          },
+        ],
+      });
+      if (selected && typeof selected === "string") {
+        await this.setTerminalWallpaper(selected);
+      }
+    } catch (err) {
+      console.debug("Diálogo nativo no disponible, abriendo selector de archivos alternativo:", err);
+      this.inputWallpaperFile?.click();
+    }
+  }
+
   private async initUpdater() {
     await updateManager.init();
 
@@ -1150,6 +1288,62 @@ class VayliIslandApp {
       this.toggleNotificationSound.addEventListener("change", () => {
         this.settings.notificationSound = this.toggleNotificationSound.checked;
         this.saveSettings();
+      });
+    }
+
+    // Controles de Apariencia, Transparencia y Wallpaper (Fase 30)
+    if (this.inputTerminalOpacity) {
+      this.inputTerminalOpacity.addEventListener("input", () => {
+        const val = parseFloat(this.inputTerminalOpacity.value);
+        this.applyTerminalOpacity(val);
+      });
+      this.inputTerminalOpacity.addEventListener("change", () => {
+        const val = parseFloat(this.inputTerminalOpacity.value);
+        this.settings.terminalOpacity = val;
+        this.applyTerminalOpacity(val);
+        this.saveSettings();
+      });
+    }
+
+    if (this.inputTerminalBlur) {
+      this.inputTerminalBlur.addEventListener("input", () => {
+        const val = parseInt(this.inputTerminalBlur.value, 10);
+        this.applyTerminalBlur(val);
+      });
+      this.inputTerminalBlur.addEventListener("change", () => {
+        const val = parseInt(this.inputTerminalBlur.value, 10);
+        this.settings.terminalBlur = val;
+        this.applyTerminalBlur(val);
+        this.saveSettings();
+      });
+    }
+
+    if (this.btnSelectWallpaper) {
+      this.btnSelectWallpaper.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.promptSelectWallpaper();
+      });
+    }
+
+    if (this.btnRemoveWallpaper) {
+      this.btnRemoveWallpaper.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.clearTerminalWallpaper();
+      });
+    }
+
+    if (this.inputWallpaperFile) {
+      this.inputWallpaperFile.addEventListener("change", (e) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = () => {
+            if (typeof reader.result === "string") {
+              this.setTerminalWallpaper(reader.result, file.name);
+            }
+          };
+          reader.readAsDataURL(file);
+        }
       });
     }
 

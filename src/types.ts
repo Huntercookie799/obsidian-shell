@@ -40,6 +40,9 @@ export interface ObsidianSettings {
   expandedWidth?: number;
   expandedHeight?: number;
   recentFolders?: string[];
+  terminalOpacity?: number;
+  terminalBlur?: number;
+  terminalWallpaper?: string;
 }
 
 export interface SystemMetrics {
