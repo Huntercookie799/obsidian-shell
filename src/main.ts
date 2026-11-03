@@ -4,7 +4,7 @@ import { isEnabled as isAutostartEnabled, enable as enableAutostart, disable as 
 import { createTerminalInstance, fitSafely, hexToRgb, setInitialDimensions, stripAnsi, updateTerminalAccentTheme } from "./components/TerminalView";
 import { CollapsedWidgetType, CustomProfile, DockPosition, IslandMode, MonitorInfo, ObsidianSettings, PtyStatus, SessionSnapshot, SnapshotPane, SnapshotTab, SystemMetrics, TerminalPane, TerminalTab } from "./types";
 import { updateManager } from "./updater/UpdateManager";
-import { CliActivityTracker, CliNotificationEvent, playNotificationSound } from "./utils/cliNotifications";
+import { CliActivityTracker, CliNotificationEvent, extractCleanSnippet, playNotificationSound } from "./utils/cliNotifications";
 
 class VayliIslandApp {
   private currentMode: IslandMode = "collapsed";
@@ -1599,8 +1599,8 @@ class VayliIslandApp {
       return true;
     });
 
-    pane.terminal.onData(() => {
-      cliTracker.onUserInput();
+    pane.terminal.onData((data) => {
+      cliTracker.onUserInput(data);
     });
 
     // Setup PTY Streaming & Status Listeners
@@ -1619,13 +1619,12 @@ class VayliIslandApp {
       // Alimentar detector heurístico de agentes CLI
       cliTracker.feedData(event.payload, (notif) => this.handleCliNotification(notif));
 
-      // Si la isla está en estado Expanded, omite por completo la limpieza y actualización del DOM de Glance
+      // Si la isla está en reposo o Glance, extraer snippet limpio de forma segura
       if (this.currentMode !== "expanded") {
-        const raw = event.payload;
-        const tail = raw.length > 400 ? raw.slice(-400) : raw;
-        const clean = stripAnsi(tail);
-        if (clean.length > 0) {
-          pane.lastSnippet = clean;
+        const clean = stripAnsi(event.payload);
+        const snippet = extractCleanSnippet(clean, 50);
+        if (snippet.length > 0 && snippet !== "Listo") {
+          pane.lastSnippet = snippet;
         }
       }
 
@@ -2110,10 +2109,13 @@ class VayliIslandApp {
       this.notificationDismissTimer = null;
     }
 
-    // Actualizar contenido de Glance
+    // Actualizar contenido de Glance sin duplicar títulos
     const tab = this.tabs.get(notif.tabId);
     const tabName = tab?.title || notif.title;
-    this.glanceTitle.textContent = `${tabName}: ${notif.title}`;
+    const cleanTitle = tabName.toLowerCase().includes(notif.title.toLowerCase())
+      ? tabName
+      : `${tabName} • ${notif.title}`;
+    this.glanceTitle.textContent = cleanTitle;
     this.glanceSnippet.textContent = notif.promptSnippet || (notif.type === "eleccion" ? "Confirmación requerida" : "Listo");
     this.glanceStatusTag.textContent = notif.type === "eleccion" ? "CONFIRMACIÓN" : "FINALIZADO";
     this.glanceStatusTag.className = `glance-status-tag ${notif.type === "eleccion" ? "warning" : "success"}`;

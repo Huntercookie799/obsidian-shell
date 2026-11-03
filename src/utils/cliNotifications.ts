@@ -71,29 +71,39 @@ export function playNotificationSound(type: CliNotificationType = "finalizado") 
  */
 export function extractCleanSnippet(text: string, maxLength = 65): string {
   if (!text) return "";
-  const lines = text
+  const rawLines = text
     .split(/\r?\n/)
-    .map((line) => line.trim())
+    .map((line) => stripAnsi(line).trim())
     .filter((line) => line.length > 0);
 
-  if (lines.length === 0) return "";
+  if (rawLines.length === 0) return "";
 
   // Priorizar líneas con signos de interrogación o prompts interactivos
-  const questionLine = [...lines].reverse().find((l) => CHOICE_REGEX.test(l) || l.includes("?"));
-  const target = questionLine || lines[lines.length - 1];
+  const questionLine = [...rawLines].reverse().find((l) => CHOICE_REGEX.test(l) || l.includes("?"));
+  const candidate = questionLine || rawLines[rawLines.length - 1];
 
   // Limpiar caracteres decorativos de cajas TUI como ╭ ╰ │ ─ ┌ └, fragmentos ANSI huérfanos y símbolos
-  const cleaned = target
-    .replace(/^[╭╰│─┌└═─\s>❯›]+/, "")
+  let cleaned = candidate
+    .replace(/^[╭╰│─┌└═─\s>❯›↳$#%]+/, "")
     .replace(/[╭╰│─┌└═─]+$/, "")
-    .replace(/[0-9]+;[0-9;]+m/g, "")
+    .replace(/(?:^|\s|[^\w])([0-9]{1,3}(?:;[0-9]{1,3})*m)/g, " ")
     .replace(/^[0-9;]+m/g, "")
+    .replace(/[0-9;]+m/g, "")
+    .replace(/\uFFFD/g, "")
     .trim();
+
+  // Si quedó vacío, intentar con la penúltima línea si existe
+  if (!cleaned && rawLines.length > 1) {
+    cleaned = rawLines[rawLines.length - 2]
+      .replace(/^[╭╰│─┌└═─\s>❯›↳$#%]+/, "")
+      .replace(/[╭╰│─┌└═─]+$/, "")
+      .trim();
+  }
 
   if (cleaned.length > maxLength) {
     return cleaned.slice(0, maxLength - 1) + "…";
   }
-  return cleaned || target.slice(0, maxLength);
+  return cleaned || "Listo";
 }
 
 /**
@@ -109,7 +119,7 @@ export class CliActivityTracker {
   private tailBuffer: string = "";
   private choiceTimer: number | null = null;
   private finishTimer: number | null = null;
-  private hasUserInput: boolean = false;
+  private hasCommandExecuted: boolean = false;
 
   private lastNotifiedType: CliNotificationType | null = null;
   private lastNotifiedSnippet: string = "";
@@ -139,8 +149,9 @@ export class CliActivityTracker {
       this.activityStartTime = now;
     }
 
-    // Mantener cola de los últimos 1500 caracteres para análisis tras stripAnsi
-    this.tailBuffer = (this.tailBuffer + chunk).slice(-1500);
+    // Mantener cola de los últimos 1500 caracteres de texto LIMPIO para análisis heurístico
+    const cleanChunk = stripAnsi(chunk);
+    this.tailBuffer = (this.tailBuffer + "\n" + cleanChunk).slice(-1500);
 
     // Cancelar temporizadores previos
     if (this.choiceTimer !== null) {
@@ -167,10 +178,9 @@ export class CliActivityTracker {
    * Dispara una alerta directa si el terminal recibe Bell (\x07)
    */
   public handleBell(onNotification: (event: CliNotificationEvent) => void) {
-    const cleanTail = stripAnsi(this.tailBuffer.slice(-600));
-    const isChoice = CHOICE_REGEX.test(cleanTail);
+    const isChoice = CHOICE_REGEX.test(this.tailBuffer);
     const type: CliNotificationType = isChoice ? "eleccion" : "finalizado";
-    const snippet = extractCleanSnippet(cleanTail) || (isChoice ? "¿Deseas continuar?" : "Tarea completada");
+    const snippet = extractCleanSnippet(this.tailBuffer) || (isChoice ? "¿Deseas continuar?" : "Tarea completada");
 
     this.emitNotification(type, snippet, onNotification);
   }
@@ -185,7 +195,6 @@ export class CliActivityTracker {
   ) {
     let message = data;
     if (oscType === 777) {
-      // Formato usual: "notify;Titulo;Mensaje"
       const parts = data.split(";");
       if (parts.length >= 3) {
         message = parts.slice(2).join(" ");
@@ -200,13 +209,15 @@ export class CliActivityTracker {
   }
 
   /**
-   * Se llama cuando el usuario envía una entrada para resetear el estado notificado
+   * Se llama cuando el usuario envía una entrada. Solo activa la expectativa de finalización si se presionó Enter (\r o \n).
    */
-  public onUserInput() {
-    this.hasUserInput = true;
+  public onUserInput(data?: string) {
+    if (data && (data.includes("\r") || data.includes("\n"))) {
+      this.hasCommandExecuted = true;
+      this.activityStartTime = Date.now();
+    }
     this.lastNotifiedType = null;
     this.lastNotifiedSnippet = "";
-    this.activityStartTime = Date.now();
     if (this.choiceTimer !== null) {
       clearTimeout(this.choiceTimer);
       this.choiceTimer = null;
@@ -221,8 +232,7 @@ export class CliActivityTracker {
    * Evalúa si el agente CLI se detuvo esperando confirmación interactiva ([Y/n], Permitir, etc.)
    */
   private evaluateChoice(onNotification: (event: CliNotificationEvent) => void) {
-    const cleanTail = stripAnsi(this.tailBuffer.slice(-600));
-    const lines = cleanTail
+    const lines = this.tailBuffer
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
@@ -246,15 +256,14 @@ export class CliActivityTracker {
    * Evalúa si una tarea prolongada realmente finalizó tras inactividad sostenida (2000ms)
    */
   private evaluateFinished(onNotification: (event: CliNotificationEvent) => void) {
-    // Si el usuario no ha ejecutado comandos en este panel, se trata del arranque inicial del shell (ignorar)
-    if (!this.hasUserInput) {
+    // Si el usuario no ha ejecutado un comando con Enter en este panel, es solo el arranque del shell (ignorar)
+    if (!this.hasCommandExecuted) {
       this.activityStartTime = 0;
       return;
     }
 
     const now = Date.now();
     const duration = now - this.activityStartTime;
-    const cleanTail = stripAnsi(this.tailBuffer.slice(-800));
 
     // Si la actividad previa fue muy breve (< 2000ms), no emitir notificación de tarea finalizada
     if (duration < 2000) {
@@ -262,7 +271,7 @@ export class CliActivityTracker {
       return;
     }
 
-    const lines = cleanTail
+    const lines = this.tailBuffer
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
@@ -277,7 +286,6 @@ export class CliActivityTracker {
     // Descartar si las últimas líneas contienen indicadores de ejecución activa (ej. Thinking, Running tool, etc.)
     const recentTail = lines.slice(-4).join("\n");
     if (ACTIVE_EXECUTION_REGEX.test(recentTail)) {
-      // El agente aún está procesando, llamando herramientas o editando
       return;
     }
 
@@ -288,13 +296,13 @@ export class CliActivityTracker {
 
     // Verificar si la última línea corresponde a un prompt interactivo listo
     if (PROMPT_READY_REGEX.test(lastLine)) {
-      this.hasUserInput = false; // Resetear para esperar el próximo comando del usuario
-      const snippet = extractCleanSnippet(cleanTail) || "Tarea finalizada con éxito";
+      this.hasCommandExecuted = false; // Resetear para esperar el próximo comando del usuario
+      this.activityStartTime = 0;
+      const snippet = extractCleanSnippet(this.tailBuffer) || "Tarea finalizada con éxito";
       this.emitNotification("finalizado", snippet, onNotification);
       return;
     }
 
-    // Si pasaron 2 segundos y el terminal se estabilizó sin match, resetear
     this.activityStartTime = 0;
   }
 
