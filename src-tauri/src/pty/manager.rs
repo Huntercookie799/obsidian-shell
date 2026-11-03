@@ -149,28 +149,8 @@ impl PtyManager {
                     accumulated.extend_from_slice(&chunk);
                 }
 
-                // Fast-Forward on massive bursts (> 256 KB = 262,144 bytes)
-                const MAX_BURST_BYTES: usize = 256 * 1024;
-                let data_to_send = if accumulated.len() > MAX_BURST_BYTES {
-                    let tail = &accumulated[accumulated.len() - MAX_BURST_BYTES..];
-                    // Search for first '\n' within the last 256 KB to preserve line integrity
-                    let raw_cut = tail.iter().position(|&b| b == b'\n').map(|p| p + 1).unwrap_or(0);
-                    
-                    // Asegurar límites de carácter UTF-8 válidos sin cortar secuencias multibyte
-                    let mut cut_pos = raw_cut;
-                    while cut_pos < tail.len() && (tail[cut_pos] & 0xC0) == 0x80 {
-                        cut_pos += 1;
-                    }
-
-                    let mut sliced = Vec::with_capacity(b"\x1b[0m".len() + (tail.len() - cut_pos));
-                    sliced.extend_from_slice(b"\x1b[0m");
-                    sliced.extend_from_slice(&tail[cut_pos..]);
-                    sliced
-                } else {
-                    accumulated.clone()
-                };
-
-                accumulated.clear();
+                // Entrega íntegra sin recorte destructivo para preservar secuencias de cursor ANSI
+                let data_to_send = std::mem::take(&mut accumulated);
 
                 let text = String::from_utf8_lossy(&data_to_send).to_string();
                 let event_name = format!("pty-output-{}", emit_session_id);

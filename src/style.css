@@ -517,12 +517,16 @@ html, body {
 }
 
 /* Mode 3: Expanded Hub Body */
+#island-hub,
 .notch-body {
   flex: 1;
   display: none;
   flex-direction: column;
   overflow: hidden;
   position: relative;
+  min-height: 0;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 #island-container.state-expanded .notch-body {
@@ -734,6 +738,7 @@ html, body {
 }
 
 /* Terminal Viewport (Anti-Flicker & Split Panes) */
+#terminal-workspace,
 .terminal-viewport {
   flex: 1;
   width: 100%;
@@ -741,8 +746,12 @@ html, body {
   position: relative;
   background: #0D0D0F;
   overflow: hidden;
+  min-height: 0;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
+.split-container,
 .tab-panes-container {
   position: absolute;
   top: 0;
@@ -753,6 +762,10 @@ html, body {
   height: 100%;
   padding: 6px 8px;
   display: none;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .tab-panes-container.active {
@@ -776,6 +789,8 @@ html, body {
   gap: 6px;
 }
 
+.split-pane,
+.terminal-instance,
 .terminal-pane {
   position: relative;
   width: 100%;
@@ -783,6 +798,8 @@ html, body {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  box-sizing: border-box;
+  padding-bottom: 6px;
   background: #0D0D0F;
   border: 1px solid #1C1C24;
   border-radius: 6px;
@@ -853,15 +870,28 @@ html, body {
 }
 
 /* Xterm Overrides */
+.terminal-pane .xterm,
+.terminal-instance .xterm,
 .xterm {
-  height: 100%;
+  height: 100% !important;
+  max-height: 100% !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
   padding: 0;
 }
 
+.terminal-pane .xterm-viewport,
+.terminal-instance .xterm-viewport,
 .xterm-viewport {
   background-color: transparent !important;
   scrollbar-width: thin;
   scrollbar-color: #27272E transparent;
+  max-height: 100% !important;
+  overflow-y: auto !important;
+  box-sizing: border-box !important;
 }
 
 /* Quick Shell Selection Popover */

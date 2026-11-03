@@ -94,10 +94,21 @@ export function setInitialDimensions(sessionId: string, cols: number, rows: numb
 /**
  * Synchronously and safely fits xterm dimensions and propagates to PTY
  */
-export function fitSafely(terminal: Terminal, fitAddon: FitAddon, sessionId: string, isUserScrolledUp: boolean = false) {
+export function fitSafely(
+  terminal: Terminal,
+  fitAddon: FitAddon,
+  sessionId: string,
+  isUserScrolledUp: boolean = false
+) {
   if (!sessionId) return;
   const element = terminal.element;
-  if (!element || element.offsetWidth < 50 || element.offsetHeight < 50) {
+  if (!element || element.clientWidth <= 0 || element.clientHeight <= 0 || element.offsetWidth < 50 || element.offsetHeight < 50) {
+    return;
+  }
+
+  // No ejecutar fit si la Dynamic Island no está en modo expandido
+  const island = document.getElementById("island-container");
+  if (island && !island.classList.contains("state-expanded")) {
     return;
   }
 
@@ -112,8 +123,19 @@ export function fitSafely(terminal: Terminal, fitAddon: FitAddon, sessionId: str
         invoke("resize_pty", { sessionId, cols, rows }).catch(() => {});
       }
     }
+
+    // Refrescar el rango completo de filas renderizadas en el buffer
+    try {
+      terminal.refresh(0, Math.max(0, terminal.rows - 1));
+    } catch {}
+
+    // Sincronización estricta de anclaje al fondo para que no quede nada oculto
     if (!isUserScrolledUp) {
       terminal.scrollToBottom();
+      const vp = element.querySelector(".xterm-viewport") as HTMLElement;
+      if (vp) {
+        vp.scrollTop = vp.scrollHeight;
+      }
     }
   } catch (err) {
     console.debug("[Anti-Flicker] Safe fit deferred:", err);
@@ -188,7 +210,12 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
   scrollBottomBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     isUserScrolledUp = false;
+    fitSafely(terminal, fitAddon, currentSessionId, false);
     terminal.scrollToBottom();
+    const vp = terminal.element?.querySelector(".xterm-viewport") as HTMLElement;
+    if (vp) {
+      vp.scrollTop = vp.scrollHeight;
+    }
     scrollBottomBtn.classList.add("hidden");
     terminal.focus();
   });
@@ -203,7 +230,7 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
     }
   });
 
-  // Renderizado optimizado por Animation Frame (RAF Batching con Fast-Forward masivo)
+  // Renderizado optimizado por Animation Frame (RAF Batching sin recorte destructivo)
   const writeBatched = (data: string) => {
     pendingOutput += data;
     if (!rafScheduled) {
@@ -212,24 +239,16 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
         rafScheduled = false;
         if (pendingOutput.length === 0) return;
 
-        let chunk = pendingOutput;
+        const chunk = pendingOutput;
         pendingOutput = "";
-
-        // Fast-Forward si la cola acumulada supera los 180,000 caracteres
-        const MAX_PENDING_CHARS = 180_000;
-        if (chunk.length > MAX_PENDING_CHARS) {
-          const tail = chunk.slice(-MAX_PENDING_CHARS);
-          const newlineIndex = tail.indexOf("\n");
-          if (newlineIndex !== -1) {
-            chunk = "\x1b[0m" + tail.slice(newlineIndex + 1);
-          } else {
-            chunk = "\x1b[0m" + tail;
-          }
-        }
 
         terminal.write(chunk, () => {
           if (!isUserScrolledUp) {
             terminal.scrollToBottom();
+            const vp = terminal.element?.querySelector(".xterm-viewport") as HTMLElement;
+            if (vp) {
+              vp.scrollTop = vp.scrollHeight;
+            }
           }
         });
       });
@@ -350,6 +369,7 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
 
   let contextMenuHandler: ((e: MouseEvent) => void) | null = null;
   let pasteHandler: ((e: ClipboardEvent) => void) | null = null;
+  let resizeObserver: ResizeObserver | null = null;
   let targetContainer: HTMLElement | null = null;
 
   const mount = (container: HTMLElement) => {
@@ -422,6 +442,18 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
 
     container.appendChild(scrollBottomBtn);
 
+    // Medición exacta y reactiva del contenedor con ResizeObserver
+    try {
+      resizeObserver = new ResizeObserver(() => {
+        if (currentSessionId) {
+          fitSafely(terminal, fitAddon, currentSessionId, isUserScrolledUp);
+        }
+      });
+      resizeObserver.observe(container);
+    } catch (e) {
+      console.debug("ResizeObserver no disponible:", e);
+    }
+
     requestAnimationFrame(() => {
       if (currentSessionId) {
         fitSafely(terminal, fitAddon, currentSessionId, isUserScrolledUp);
@@ -430,6 +462,10 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
   };
 
   const dispose = () => {
+    if (resizeObserver) {
+      resizeObserver.disconnect();
+      resizeObserver = null;
+    }
     scrollBottomBtn.remove();
     if (currentSessionId) {
       lastDimensionsMap.delete(currentSessionId);
