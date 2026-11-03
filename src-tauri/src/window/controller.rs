@@ -1,9 +1,36 @@
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use tauri::{Emitter, PhysicalPosition, PhysicalSize, WebviewWindow};
 
 static CURRENT_MONITOR_INDEX: AtomicUsize = AtomicUsize::new(0);
 pub static SHOW_OVER_FULLSCREEN: AtomicBool = AtomicBool::new(false);
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum DockPosition {
+    TopCenter,
+    TopLeft,
+    TopRight,
+    LeftEdge { y_ratio: f32 },
+    RightEdge { y_ratio: f32 },
+}
+
+impl Default for DockPosition {
+    fn default() -> Self {
+        DockPosition::TopCenter
+    }
+}
+
+static CURRENT_DOCK_POSITION: Mutex<DockPosition> = Mutex::new(DockPosition::TopCenter);
+
+pub fn get_dock_position() -> DockPosition {
+    *CURRENT_DOCK_POSITION.lock()
+}
+
+pub fn set_dock_position(pos: DockPosition) {
+    *CURRENT_DOCK_POSITION.lock() = pos;
+}
 
 pub fn is_show_over_fullscreen() -> bool {
     SHOW_OVER_FULLSCREEN.load(Ordering::SeqCst)
@@ -43,18 +70,94 @@ pub fn update_island_geometry_on_monitor(
     let monitor_size = monitor.size();
     let monitor_pos = monitor.position();
 
-    let (logical_w, logical_h) = match state {
-        IslandState::Collapsed => (260.0, 34.0),
-        IslandState::Glance => (420.0, 64.0),
-        IslandState::Expanded => (850.0, 480.0),
+    let dock_pos = get_dock_position();
+
+    let (phys_w, phys_h, phys_x, phys_y) = match dock_pos {
+        DockPosition::TopCenter | DockPosition::TopLeft | DockPosition::TopRight => {
+            let (logical_w, logical_h) = match state {
+                IslandState::Collapsed => (260.0, 34.0),
+                IslandState::Glance => (420.0, 64.0),
+                IslandState::Expanded => (850.0, 480.0),
+            };
+
+            let pw = (logical_w * scale_factor).round() as u32;
+            let ph = (logical_h * scale_factor).round() as u32;
+
+            let px = match dock_pos {
+                DockPosition::TopCenter => {
+                    let center_offset = (monitor_size.width.saturating_sub(pw)) / 2;
+                    monitor_pos.x + center_offset as i32
+                }
+                DockPosition::TopLeft => {
+                    monitor_pos.x + (16.0 * scale_factor).round() as i32
+                }
+                DockPosition::TopRight => {
+                    monitor_pos.x + monitor_size.width as i32 - pw as i32 - (16.0 * scale_factor).round() as i32
+                }
+                _ => unreachable!(),
+            };
+            let py = monitor_pos.y;
+            (pw, ph, px, py)
+        }
+        DockPosition::LeftEdge { y_ratio } => {
+            let safe_ratio = y_ratio.clamp(0.0, 1.0);
+            if state == IslandState::Collapsed {
+                // Modo Pestaña Vertical: 34x260
+                let pw = (34.0 * scale_factor).round() as u32;
+                let ph = (260.0 * scale_factor).round() as u32;
+                let px = monitor_pos.x + (4.0 * scale_factor).round() as i32;
+                let available_h = monitor_size.height.saturating_sub(ph) as f32;
+                let py = monitor_pos.y + (available_h * safe_ratio).round() as i32;
+                (pw, ph, px, py)
+            } else {
+                // Glance (420x64) o Expanded (850x480) desplegándose hacia la derecha
+                let (logical_w, logical_h) = match state {
+                    IslandState::Glance => (420.0, 64.0),
+                    IslandState::Expanded => (850.0, 480.0),
+                    _ => unreachable!(),
+                };
+                let pw = (logical_w * scale_factor).round() as u32;
+                let ph = (logical_h * scale_factor).round() as u32;
+                let px = monitor_pos.x + (4.0 * scale_factor).round() as i32;
+
+                let target_center_y = monitor_pos.y as f32 + (monitor_size.height as f32 * safe_ratio);
+                let ideal_y = (target_center_y - (ph as f32 / 2.0)).round() as i32;
+                let min_y = monitor_pos.y + (8.0 * scale_factor).round() as i32;
+                let max_y = monitor_pos.y + monitor_size.height as i32 - ph as i32 - (8.0 * scale_factor).round() as i32;
+                let py = ideal_y.clamp(min_y, max_y.max(min_y));
+                (pw, ph, px, py)
+            }
+        }
+        DockPosition::RightEdge { y_ratio } => {
+            let safe_ratio = y_ratio.clamp(0.0, 1.0);
+            if state == IslandState::Collapsed {
+                // Modo Pestaña Vertical: 34x260
+                let pw = (34.0 * scale_factor).round() as u32;
+                let ph = (260.0 * scale_factor).round() as u32;
+                let px = monitor_pos.x + monitor_size.width as i32 - pw as i32 - (4.0 * scale_factor).round() as i32;
+                let available_h = monitor_size.height.saturating_sub(ph) as f32;
+                let py = monitor_pos.y + (available_h * safe_ratio).round() as i32;
+                (pw, ph, px, py)
+            } else {
+                // Glance (420x64) o Expanded (850x480) desplegándose hacia la izquierda
+                let (logical_w, logical_h) = match state {
+                    IslandState::Glance => (420.0, 64.0),
+                    IslandState::Expanded => (850.0, 480.0),
+                    _ => unreachable!(),
+                };
+                let pw = (logical_w * scale_factor).round() as u32;
+                let ph = (logical_h * scale_factor).round() as u32;
+                let px = monitor_pos.x + monitor_size.width as i32 - pw as i32 - (4.0 * scale_factor).round() as i32;
+
+                let target_center_y = monitor_pos.y as f32 + (monitor_size.height as f32 * safe_ratio);
+                let ideal_y = (target_center_y - (ph as f32 / 2.0)).round() as i32;
+                let min_y = monitor_pos.y + (8.0 * scale_factor).round() as i32;
+                let max_y = monitor_pos.y + monitor_size.height as i32 - ph as i32 - (8.0 * scale_factor).round() as i32;
+                let py = ideal_y.clamp(min_y, max_y.max(min_y));
+                (pw, ph, px, py)
+            }
+        }
     };
-
-    let phys_w = (logical_w * scale_factor).round() as u32;
-    let phys_h = (logical_h * scale_factor).round() as u32;
-
-    let center_offset = (monitor_size.width.saturating_sub(phys_w)) / 2;
-    let phys_x = monitor_pos.x + center_offset as i32;
-    let phys_y = monitor_pos.y; // Pinned directly to the top edge (y = 0)
 
     // Temporarily allow resize during programmatic HUD state transition on Windows
     let _ = window.set_resizable(true);
@@ -167,6 +270,82 @@ pub fn switch_monitor(window: &WebviewWindow, state: IslandState) -> Result<usiz
     update_island_geometry_on_monitor(window, state, Some(next))?;
     let _ = window.emit("monitor-changed", next);
     Ok(next)
+}
+
+pub fn snap_window_to_nearest_edge(
+    window: &WebviewWindow,
+    current_state: IslandState,
+) -> Result<DockPosition, String> {
+    let win_pos = window
+        .outer_position()
+        .map_err(|e| format!("Error al obtener posición de ventana: {}", e))?;
+    let win_size = window
+        .outer_size()
+        .map_err(|e| format!("Error al obtener tamaño de ventana: {}", e))?;
+
+    let monitors = window
+        .available_monitors()
+        .map_err(|e| format!("Error al listar monitores: {}", e))?;
+
+    if monitors.is_empty() {
+        return Err("No hay monitores disponibles".to_string());
+    }
+
+    // Identificar el monitor más cercano al centro de la ventana
+    let win_center_x = win_pos.x + (win_size.width as i32 / 2);
+    let win_center_y = win_pos.y + (win_size.height as i32 / 2);
+
+    let mut best_monitor_idx = 0;
+    let mut min_mon_dist = i64::MAX;
+
+    for (idx, m) in monitors.iter().enumerate() {
+        let m_pos = m.position();
+        let m_size = m.size();
+        let m_cx = m_pos.x + (m_size.width as i32 / 2);
+        let m_cy = m_pos.y + (m_size.height as i32 / 2);
+        let dist = ((win_center_x - m_cx) as i64).pow(2) + ((win_center_y - m_cy) as i64).pow(2);
+        if dist < min_mon_dist {
+            min_mon_dist = dist;
+            best_monitor_idx = idx;
+        }
+    }
+
+    CURRENT_MONITOR_INDEX.store(best_monitor_idx, Ordering::SeqCst);
+    let monitor = &monitors[best_monitor_idx];
+    let mon_pos = monitor.position();
+    let mon_size = monitor.size();
+    let mon_w = mon_size.width as i32;
+    let mon_h = mon_size.height as i32;
+
+    let rel_x = (win_center_x - mon_pos.x).clamp(0, mon_w);
+    let rel_y = (win_center_y - mon_pos.y).clamp(0, mon_h);
+
+    let dist_top = rel_y;
+    let dist_left = rel_x;
+    let dist_right = mon_w - rel_x;
+
+    let best_dock = if dist_left < dist_top && dist_left < dist_right {
+        let y_ratio = (rel_y as f32 / mon_h.max(1) as f32).clamp(0.05, 0.95);
+        DockPosition::LeftEdge { y_ratio }
+    } else if dist_right < dist_top && dist_right < dist_left {
+        let y_ratio = (rel_y as f32 / mon_h.max(1) as f32).clamp(0.05, 0.95);
+        DockPosition::RightEdge { y_ratio }
+    } else {
+        let x_fraction = rel_x as f32 / mon_w.max(1) as f32;
+        if x_fraction < 0.28 {
+            DockPosition::TopLeft
+        } else if x_fraction > 0.72 {
+            DockPosition::TopRight
+        } else {
+            DockPosition::TopCenter
+        }
+    };
+
+    set_dock_position(best_dock);
+    update_island_geometry_on_monitor(window, current_state, Some(best_monitor_idx))?;
+    let _ = window.emit("dock-position-changed", &best_dock);
+
+    Ok(best_dock)
 }
 
 #[cfg(target_os = "windows")]

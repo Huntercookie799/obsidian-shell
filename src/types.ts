@@ -7,6 +7,15 @@ export type IslandMode = "collapsed" | "glance" | "expanded";
 export type SplitLayout = "single" | "split-vertical" | "split-horizontal";
 export type CollapsedWidgetType = "pty_status" | "clock" | "system_metrics" | "live_log";
 
+export type DockPositionType = "TopCenter" | "TopLeft" | "TopRight" | "LeftEdge" | "RightEdge";
+
+export type DockPosition =
+  | { type: "TopCenter" }
+  | { type: "TopLeft" }
+  | { type: "TopRight" }
+  | { type: "LeftEdge"; y_ratio: number }
+  | { type: "RightEdge"; y_ratio: number };
+
 export interface MonitorInfo {
   index: number;
   name: string;
@@ -27,6 +36,7 @@ export interface ObsidianSettings {
   targetMonitorIndex?: number;
   cliNotifications?: boolean;
   notificationSound?: boolean;
+  dockPosition?: DockPosition;
 }
 
 export interface SystemMetrics {

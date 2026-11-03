@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { isEnabled as isAutostartEnabled, enable as enableAutostart, disable as disableAutostart } from "@tauri-apps/plugin-autostart";
 import { createTerminalInstance, fitSafely, hexToRgb, setInitialDimensions, stripAnsi, updateTerminalAccentTheme } from "./components/TerminalView";
-import { CollapsedWidgetType, CustomProfile, IslandMode, MonitorInfo, ObsidianSettings, PtyStatus, SessionSnapshot, SnapshotPane, SnapshotTab, SystemMetrics, TerminalPane, TerminalTab } from "./types";
+import { CollapsedWidgetType, CustomProfile, DockPosition, IslandMode, MonitorInfo, ObsidianSettings, PtyStatus, SessionSnapshot, SnapshotPane, SnapshotTab, SystemMetrics, TerminalPane, TerminalTab } from "./types";
 import { updateManager } from "./updater/UpdateManager";
 import { CliActivityTracker, CliNotificationEvent, playNotificationSound } from "./utils/cliNotifications";
 
@@ -81,7 +81,10 @@ class VayliIslandApp {
   private toggleAutostart!: HTMLInputElement;
   private toggleRestoreSession!: HTMLInputElement;
   private toggleShowOverFullscreen!: HTMLInputElement;
+  private selectDockPosition!: HTMLSelectElement;
   private selectActiveMonitor!: HTMLSelectElement;
+  private currentDockPosition: DockPosition = { type: "TopCenter" };
+  private dragDebounceTimer: number | null = null;
   private inputAccentPicker!: HTMLInputElement;
   private selectCollapsedWidget!: HTMLSelectElement;
   private settingClockRow!: HTMLElement;
@@ -179,6 +182,7 @@ class VayliIslandApp {
     this.toggleAutostart = document.getElementById("toggle-autostart") as HTMLInputElement;
     this.toggleRestoreSession = document.getElementById("toggle-restore-session") as HTMLInputElement;
     this.toggleShowOverFullscreen = document.getElementById("toggle-show-over-fullscreen") as HTMLInputElement;
+    this.selectDockPosition = document.getElementById("select-dock-position") as HTMLSelectElement;
     this.selectActiveMonitor = document.getElementById("select-active-monitor") as HTMLSelectElement;
     this.inputAccentPicker = document.getElementById("input-accent-picker") as HTMLInputElement;
     this.selectCollapsedWidget = document.getElementById("select-collapsed-widget") as HTMLSelectElement;
@@ -268,6 +272,29 @@ class VayliIslandApp {
         console.debug("Error al ubicar notch en pantalla guardada:", err);
       }
     }
+    // Sincronizar posición de anclaje (docking) guardada
+    if (this.settings.dockPosition) {
+      this.currentDockPosition = this.settings.dockPosition;
+      try {
+        await invoke("set_dock_position", { position: this.currentDockPosition });
+      } catch (err) {
+        console.debug("Error al restaurar posición de dock:", err);
+      }
+    } else {
+      try {
+        const initialDock = await invoke<DockPosition>("get_dock_position");
+        if (initialDock) {
+          this.currentDockPosition = initialDock;
+        }
+      } catch (err) {
+        console.debug("Error al consultar dock position inicial:", err);
+      }
+    }
+    this.applyDockClass(this.currentDockPosition);
+    if (this.selectDockPosition) {
+      this.selectDockPosition.value = this.currentDockPosition.type;
+    }
+
     await this.refreshMonitorsList();
   }
 
@@ -353,6 +380,34 @@ class VayliIslandApp {
 
     if (this.inputAccentPicker) {
       this.inputAccentPicker.value = hex;
+    }
+  }
+
+  public applyDockClass(pos: DockPosition) {
+    this.islandContainer.classList.remove(
+      "dock-top-center",
+      "dock-top-left",
+      "dock-top-right",
+      "dock-vertical-left",
+      "dock-vertical-right"
+    );
+
+    switch (pos.type) {
+      case "TopCenter":
+        this.islandContainer.classList.add("dock-top-center");
+        break;
+      case "TopLeft":
+        this.islandContainer.classList.add("dock-top-left");
+        break;
+      case "TopRight":
+        this.islandContainer.classList.add("dock-top-right");
+        break;
+      case "LeftEdge":
+        this.islandContainer.classList.add("dock-vertical-left");
+        break;
+      case "RightEdge":
+        this.islandContainer.classList.add("dock-vertical-right");
+        break;
     }
   }
 
@@ -844,6 +899,42 @@ class VayliIslandApp {
       }
     });
 
+    // Escuchar cambio de posición de acoplamiento magnético
+    listen<DockPosition>("dock-position-changed", (event) => {
+      const newPos = event.payload;
+      this.currentDockPosition = newPos;
+      this.settings.dockPosition = newPos;
+      this.saveSettings();
+      this.applyDockClass(newPos);
+      if (this.selectDockPosition) {
+        this.selectDockPosition.value = newPos.type;
+      }
+    });
+
+    if (this.selectDockPosition) {
+      this.selectDockPosition.addEventListener("change", async () => {
+        const val = this.selectDockPosition.value;
+        let newPos: DockPosition;
+        if (val === "LeftEdge" || val === "RightEdge") {
+          newPos = { type: val, y_ratio: 0.5 };
+        } else {
+          newPos = { type: val as "TopCenter" | "TopLeft" | "TopRight" };
+        }
+        this.currentDockPosition = newPos;
+        this.settings.dockPosition = newPos;
+        this.saveSettings();
+        this.applyDockClass(newPos);
+        try {
+          await invoke("set_dock_position", { position: newPos });
+        } catch (err) {
+          console.error("Error al fijar posición de la isla:", err);
+        }
+      });
+    }
+
+    // Configurar arrastre libre y acoplamiento magnético (Magnetic Snap Docking)
+    this.setupDragAndSnap();
+
     // Escuchar solicitud de salida del System Tray
     listen("tray-quit-requested", async () => {
       if (this.settings.restoreSessionOnStartup) {
@@ -1016,6 +1107,95 @@ class VayliIslandApp {
         e.stopPropagation();
         this.cycleTab(e.shiftKey ? "prev" : "next");
         return;
+      }
+    });
+  }
+
+  private setupDragAndSnap() {
+    let isMouseDown = false;
+    let hasDragged = false;
+    let startScreenX = 0;
+    let startScreenY = 0;
+
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target.closest(
+          "button, input, select, .tab-item, .tab-close-btn, .shell-menu-popover, .settings-popover, .terminal-search-bar"
+        )
+      ) {
+        return;
+      }
+      isMouseDown = true;
+      hasDragged = false;
+      startScreenX = e.screenX;
+      startScreenY = e.screenY;
+    };
+
+    const onMouseMove = async (e: MouseEvent) => {
+      if (!isMouseDown) return;
+      const dist = Math.hypot(e.screenX - startScreenX, e.screenY - startScreenY);
+      if (!hasDragged && dist > 5) {
+        hasDragged = true;
+        try {
+          const { getCurrentWindow } = await import("@tauri-apps/api/window");
+          await getCurrentWindow().startDragging();
+        } catch (err) {
+          console.debug("Error al iniciar arrastre nativo:", err);
+        }
+      }
+    };
+
+    const onMouseUp = async () => {
+      if (isMouseDown && hasDragged) {
+        isMouseDown = false;
+        hasDragged = false;
+        try {
+          const newPos = await invoke<DockPosition>("snap_window_to_nearest_edge");
+          this.currentDockPosition = newPos;
+          this.settings.dockPosition = newPos;
+          this.saveSettings();
+          this.applyDockClass(newPos);
+          if (this.selectDockPosition) {
+            this.selectDockPosition.value = newPos.type;
+          }
+        } catch (err) {
+          console.error("Error al aplicar snap magnético:", err);
+        }
+      } else {
+        isMouseDown = false;
+        hasDragged = false;
+      }
+    };
+
+    this.notchPill.addEventListener("mousedown", onMouseDown);
+    const hubHeader = document.getElementById("hub-header");
+    if (hubHeader) {
+      hubHeader.addEventListener("mousedown", onMouseDown);
+    }
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+
+    listen("tauri://move", () => {
+      if (hasDragged || isMouseDown) {
+        if (this.dragDebounceTimer) clearTimeout(this.dragDebounceTimer);
+        this.dragDebounceTimer = window.setTimeout(async () => {
+          isMouseDown = false;
+          hasDragged = false;
+          try {
+            const newPos = await invoke<DockPosition>("snap_window_to_nearest_edge");
+            this.currentDockPosition = newPos;
+            this.settings.dockPosition = newPos;
+            this.saveSettings();
+            this.applyDockClass(newPos);
+            if (this.selectDockPosition) {
+              this.selectDockPosition.value = newPos.type;
+            }
+          } catch (err) {
+            console.debug("Snap post-move:", err);
+          }
+        }, 160);
       }
     });
   }

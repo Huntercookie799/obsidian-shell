@@ -84,6 +84,121 @@ html, body {
   box-shadow: 0 16px 50px rgba(0, 0, 0, 0.9), 0 0 0 1px #27272A;
 }
 
+/* Dock Position Transform Origins & Alignments */
+#island-container.dock-top-center {
+  transform-origin: top center;
+}
+
+#island-container.dock-top-left {
+  transform-origin: top left;
+}
+
+#island-container.dock-top-right {
+  transform-origin: top right;
+}
+
+#island-container.dock-vertical-left {
+  transform-origin: center left;
+}
+
+#island-container.dock-vertical-right {
+  transform-origin: center right;
+}
+
+/* Vertical Tab Pill on Left & Right Edges */
+#island-container.state-collapsed.dock-vertical-left {
+  width: 34px;
+  height: 260px;
+  border-radius: 0 17px 17px 0;
+}
+
+#island-container.state-collapsed.dock-vertical-right {
+  width: 34px;
+  height: 260px;
+  border-radius: 17px 0 0 17px;
+}
+
+#island-container.state-collapsed.dock-vertical-left #notch-pill,
+#island-container.state-collapsed.dock-vertical-right #notch-pill {
+  flex-direction: column;
+  width: 34px;
+  height: 260px;
+  min-height: 260px;
+  padding: 12px 0;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#island-container.state-collapsed.dock-vertical-left .pill-left,
+#island-container.state-collapsed.dock-vertical-right .pill-left,
+#island-container.state-collapsed.dock-vertical-left .pill-right,
+#island-container.state-collapsed.dock-vertical-right .pill-right {
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+
+#island-container.state-collapsed.dock-vertical-left .pill-center,
+#island-container.state-collapsed.dock-vertical-right .pill-center {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 0;
+}
+
+#island-container.state-collapsed.dock-vertical-left .pill-widget,
+#island-container.state-collapsed.dock-vertical-right .pill-widget {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Vertical writing mode for texts */
+#island-container.state-collapsed.dock-vertical-left .tty-badge,
+#island-container.state-collapsed.dock-vertical-right .tty-badge,
+#island-container.state-collapsed.dock-vertical-left .process-name,
+#island-container.state-collapsed.dock-vertical-right .process-name,
+#island-container.state-collapsed.dock-vertical-left .clock-time,
+#island-container.state-collapsed.dock-vertical-right .clock-time,
+#island-container.state-collapsed.dock-vertical-left .metric-item,
+#island-container.state-collapsed.dock-vertical-right .metric-item,
+#island-container.state-collapsed.dock-vertical-left .livelog-proc,
+#island-container.state-collapsed.dock-vertical-right .livelog-proc,
+#island-container.state-collapsed.dock-vertical-left .livelog-snippet,
+#island-container.state-collapsed.dock-vertical-right .livelog-snippet {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  letter-spacing: 1px;
+}
+
+/* Left edge: rotate 180deg so text reads naturally from bottom to top */
+#island-container.state-collapsed.dock-vertical-left .tty-badge,
+#island-container.state-collapsed.dock-vertical-left .process-name,
+#island-container.state-collapsed.dock-vertical-left .clock-time,
+#island-container.state-collapsed.dock-vertical-left .metric-item,
+#island-container.state-collapsed.dock-vertical-left .livelog-proc,
+#island-container.state-collapsed.dock-vertical-left .livelog-snippet {
+  transform: rotate(180deg);
+}
+
+/* Right edge: reads from top to bottom */
+#island-container.state-collapsed.dock-vertical-right .tty-badge,
+#island-container.state-collapsed.dock-vertical-right .process-name,
+#island-container.state-collapsed.dock-vertical-right .clock-time,
+#island-container.state-collapsed.dock-vertical-right .metric-item,
+#island-container.state-collapsed.dock-vertical-right .livelog-proc,
+#island-container.state-collapsed.dock-vertical-right .livelog-snippet {
+  transform: none;
+}
+
+#island-container.state-collapsed.dock-vertical-left .metric-sep,
+#island-container.state-collapsed.dock-vertical-right .metric-sep {
+  display: none;
+}
+
 /* Rim Light: Dynamic Edge Glow */
 .rim-light {
   position: absolute;

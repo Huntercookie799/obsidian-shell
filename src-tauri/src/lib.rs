@@ -200,8 +200,38 @@ fn center_island(
     window: WebviewWindow,
     state_holder: State<IslandStateHolder>,
 ) -> Result<(), String> {
+    window::set_dock_position(window::DockPosition::TopCenter);
     let state = *state_holder.0.lock();
-    update_island_geometry(&window, state)
+    window::update_island_geometry(&window, state)?;
+    let _ = window.emit("dock-position-changed", &window::DockPosition::TopCenter);
+    Ok(())
+}
+
+#[tauri::command]
+fn set_dock_position(
+    window: WebviewWindow,
+    state_holder: State<IslandStateHolder>,
+    position: window::DockPosition,
+) -> Result<(), String> {
+    window::set_dock_position(position);
+    let state = *state_holder.0.lock();
+    window::update_island_geometry(&window, state)?;
+    let _ = window.emit("dock-position-changed", &position);
+    Ok(())
+}
+
+#[tauri::command]
+fn get_dock_position() -> window::DockPosition {
+    window::get_dock_position()
+}
+
+#[tauri::command]
+fn snap_window_to_nearest_edge(
+    window: WebviewWindow,
+    state_holder: State<IslandStateHolder>,
+) -> Result<window::DockPosition, String> {
+    let state = *state_holder.0.lock();
+    window::snap_window_to_nearest_edge(&window, state)
 }
 
 #[tauri::command]
@@ -407,6 +437,9 @@ pub fn run() {
             check_fullscreen_occlusion,
             switch_to_next_monitor,
             center_island,
+            set_dock_position,
+            get_dock_position,
+            snap_window_to_nearest_edge,
             get_system_metrics,
             get_available_monitors,
             set_active_monitor
