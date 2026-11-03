@@ -1390,7 +1390,7 @@ class VayliIslandApp {
     }
 
     if (mode === "expanded") {
-      this.fitActiveTabPanes(true);
+      this.fitActiveTabPanes(true, true);
     }
   }
 
@@ -1497,6 +1497,7 @@ class VayliIslandApp {
       smartPaste,
       writeBatched,
       isUserScrolledUp,
+      resetScrollToBottom: termInstance.resetScrollToBottom,
       setSessionId,
       element: paneEl,
     };
@@ -1661,14 +1662,20 @@ class VayliIslandApp {
     return tab.panes.find((p) => p.id === tab.activePaneId) || tab.panes[0] || null;
   }
 
-  public fitActiveTabPanes(withTransitionSequence: boolean = false) {
+  public fitActiveTabPanes(withTransitionSequence: boolean = false, resetScrollToBottom: boolean = false) {
     if (!this.activeTabId) return;
     const tab = this.tabs.get(this.activeTabId);
     if (!tab) return;
 
     const executeFit = () => {
       tab.panes.forEach((pane) => {
+        if (resetScrollToBottom && pane.resetScrollToBottom) {
+          pane.resetScrollToBottom();
+        }
         fitSafely(pane.terminal, pane.fitAddon, pane.sessionId, pane.isUserScrolledUp());
+        if (resetScrollToBottom && pane.resetScrollToBottom) {
+          pane.resetScrollToBottom();
+        }
       });
       const active = this.getActivePane();
       if (active) active.terminal.focus();
@@ -1676,10 +1683,10 @@ class VayliIslandApp {
 
     requestAnimationFrame(executeFit);
 
-    // Ejecución diferida post-transición (60ms y 260ms al concluir transición CSS) para sincronizar SIGWINCH con Zsh y Fish
+    // Ejecución diferida post-transición (60ms y 240ms al concluir transición CSS) para sincronizar SIGWINCH con Zsh y Fish
     if (withTransitionSequence) {
       window.setTimeout(executeFit, 60);
-      window.setTimeout(executeFit, 260);
+      window.setTimeout(executeFit, 240);
     }
   }
 
@@ -1706,7 +1713,7 @@ class VayliIslandApp {
     this.scheduleAutoSave();
 
     if (this.currentMode === "expanded") {
-      this.fitActiveTabPanes(true);
+      this.fitActiveTabPanes(true, true);
     }
   }
 

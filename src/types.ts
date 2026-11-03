@@ -69,6 +69,7 @@ export interface TerminalPane {
   serializeBuffer: (maxLines?: number) => string;
   writeBatched: (data: string) => void;
   isUserScrolledUp: () => boolean;
+  resetScrollToBottom?: () => void;
   smartPaste?: (rawText: string) => void;
   setSessionId?: (id: string) => void;
   element: HTMLDivElement;

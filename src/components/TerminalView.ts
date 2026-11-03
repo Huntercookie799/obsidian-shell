@@ -151,6 +151,7 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
   smartPaste: (rawText: string) => void;
   writeBatched: (data: string) => void;
   isUserScrolledUp: () => boolean;
+  resetScrollToBottom: () => void;
   setSessionId: (newId: string) => void;
   mount: (container: HTMLElement) => void;
   dispose: () => void;
@@ -199,6 +200,7 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
   let isUserScrolledUp = false;
   let pendingOutput = "";
   let rafScheduled = false;
+  let bgTimerScheduled = false;
 
   // Botón flotante para saltar al final (↓ Final)
   const scrollBottomBtn = document.createElement("button");
@@ -234,29 +236,62 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
     }
   });
 
-  // Renderizado optimizado por Animation Frame (RAF Batching sin recorte destructivo)
+  // Vacía y procesa todo el buffer pendiente directamente en Xterm
+  const flushOutput = () => {
+    rafScheduled = false;
+    bgTimerScheduled = false;
+    if (pendingOutput.length === 0) return;
+
+    const chunk = pendingOutput;
+    pendingOutput = "";
+
+    terminal.write(chunk, () => {
+      if (!isUserScrolledUp) {
+        terminal.scrollToBottom();
+        const vp = terminal.element?.querySelector(".xterm-viewport") as HTMLElement;
+        if (vp) {
+          vp.scrollTop = vp.scrollHeight;
+        }
+      }
+    });
+  };
+
+  // Renderizado híbrido optimizado:
+  // - En modo expandido: sincronizado con requestAnimationFrame (60 Hz fluido en monitor).
+  // - En modo colapsado/minimizado: los navegadores pausan o retrasan los RAF, por lo que usamos
+  //   un temporizador continuo setTimeout(..., 16) para que Xterm procese los datos en segundo plano
+  //   sin acumular una montaña de bytes para el momento en que el usuario abre la terminal.
   const writeBatched = (data: string) => {
     pendingOutput += data;
-    if (!rafScheduled) {
-      rafScheduled = true;
-      requestAnimationFrame(() => {
-        rafScheduled = false;
-        if (pendingOutput.length === 0) return;
 
-        const chunk = pendingOutput;
-        pendingOutput = "";
+    const island = document.getElementById("island-container");
+    const isExpanded = island?.classList.contains("state-expanded");
 
-        terminal.write(chunk, () => {
-          if (!isUserScrolledUp) {
-            terminal.scrollToBottom();
-            const vp = terminal.element?.querySelector(".xterm-viewport") as HTMLElement;
-            if (vp) {
-              vp.scrollTop = vp.scrollHeight;
-            }
-          }
-        });
-      });
+    if (isExpanded) {
+      if (!rafScheduled) {
+        rafScheduled = true;
+        requestAnimationFrame(flushOutput);
+      }
+    } else {
+      if (!bgTimerScheduled) {
+        bgTimerScheduled = true;
+        window.setTimeout(flushOutput, 16);
+      }
     }
+  };
+
+  // Restablece el scroll y ancla la terminal directamente al fondo activo
+  const resetScrollToBottom = () => {
+    isUserScrolledUp = false;
+    scrollBottomBtn.classList.add("hidden");
+    flushOutput();
+    try {
+      terminal.scrollToBottom();
+      const vp = terminal.element?.querySelector(".xterm-viewport") as HTMLElement;
+      if (vp) {
+        vp.scrollTop = vp.scrollHeight;
+      }
+    } catch {}
   };
 
   const serializeBuffer = (maxLines: number = 500): string => {
@@ -446,12 +481,19 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
 
     container.appendChild(scrollBottomBtn);
 
-    // Medición exacta y reactiva del contenedor con ResizeObserver
+    // Medición exacta y reactiva del contenedor con ResizeObserver con debounce para evitar el bombardeo de ConPTY
     try {
+      let resizeDebounceTimer: number | null = null;
       resizeObserver = new ResizeObserver(() => {
-        if (currentSessionId) {
-          fitSafely(terminal, fitAddon, currentSessionId, isUserScrolledUp);
+        if (!currentSessionId) return;
+
+        if (resizeDebounceTimer !== null) {
+          clearTimeout(resizeDebounceTimer);
         }
+        resizeDebounceTimer = window.setTimeout(() => {
+          resizeDebounceTimer = null;
+          fitSafely(terminal, fitAddon, currentSessionId, isUserScrolledUp);
+        }, 80);
       });
       resizeObserver.observe(container);
     } catch (e) {
@@ -501,6 +543,7 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
     smartPaste,
     writeBatched,
     isUserScrolledUp: () => isUserScrolledUp,
+    resetScrollToBottom,
     setSessionId: (newId: string) => {
       currentSessionId = newId;
     },
