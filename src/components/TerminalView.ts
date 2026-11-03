@@ -139,10 +139,6 @@ export function fitSafely(
     // Sincronización estricta de anclaje al fondo para que no quede nada oculto
     if (!isUserScrolledUp) {
       terminal.scrollToBottom();
-      const vp = element.querySelector(".xterm-viewport") as HTMLElement;
-      if (vp) {
-        vp.scrollTop = vp.scrollHeight;
-      }
     }
   } catch (err) {
     console.debug("[Anti-Flicker] Safe fit deferred:", err);
@@ -255,10 +251,6 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
     terminal.write(chunk, () => {
       if (!isUserScrolledUp) {
         terminal.scrollToBottom();
-        const vp = terminal.element?.querySelector(".xterm-viewport") as HTMLElement;
-        if (vp) {
-          vp.scrollTop = vp.scrollHeight;
-        }
       }
     });
   };
@@ -294,10 +286,6 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
     flushOutput();
     try {
       terminal.scrollToBottom();
-      const vp = terminal.element?.querySelector(".xterm-viewport") as HTMLElement;
-      if (vp) {
-        vp.scrollTop = vp.scrollHeight;
-      }
     } catch {}
   };
 

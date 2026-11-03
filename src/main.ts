@@ -665,7 +665,15 @@ class VayliIslandApp {
         }
         this.autoCollapseTimer = window.setTimeout(() => {
           if (this.currentMode === "expanded") {
-            this.setMode("collapsed");
+            // No auto-colapsar si el usuario está enfocado y trabajando activamente con el teclado en la terminal
+            const isTerminalFocused = Boolean(
+              document.activeElement &&
+              (document.activeElement.classList.contains("xterm-helper-textarea") ||
+               document.activeElement.closest(".terminal-pane"))
+            );
+            if (!isTerminalFocused) {
+              this.setMode("collapsed");
+            }
           }
         }, 300);
       }
@@ -1028,6 +1036,21 @@ class VayliIslandApp {
       this.settingsPopover.classList.add("hidden");
     });
 
+    // Auto-enfocar la terminal activa al recuperar foco la ventana o al interactuar con el workspace
+    window.addEventListener("focus", () => {
+      if (this.currentMode === "expanded") {
+        const active = this.getActivePane();
+        if (active) active.terminal.focus();
+      }
+    });
+
+    this.viewportEl.addEventListener("mousedown", () => {
+      if (this.currentMode === "expanded") {
+        const active = this.getActivePane();
+        if (active) active.terminal.focus();
+      }
+    });
+
     // Custom event dispatched from Xterm (Ctrl+W)
     window.addEventListener("vayli:close-active-pane", () => {
       this.closeActivePaneOrTab();
@@ -1082,7 +1105,16 @@ class VayliIslandApp {
           this.shellMenuPopover.classList.add("hidden");
           return;
         }
-        if (this.currentMode !== "collapsed") {
+
+        // Si el usuario está enfocado dentro de la terminal interactiva, permitir que Escape
+        // pase íntegro al proceso PTY (para Antigravity CLI, Vim, Nano, Claude Code, etc.)
+        const isTerminalFocused = Boolean(
+          document.activeElement &&
+          (document.activeElement.classList.contains("xterm-helper-textarea") ||
+           document.activeElement.closest(".terminal-pane"))
+        );
+
+        if (!isTerminalFocused && this.currentMode !== "collapsed") {
           e.preventDefault();
           this.shellMenuPopover.classList.add("hidden");
           this.settingsPopover.classList.add("hidden");
