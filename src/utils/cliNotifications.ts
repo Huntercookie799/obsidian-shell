@@ -20,8 +20,11 @@ export interface CliNotificationEvent {
 // Patrones heurísticos para detectar preguntas interactivas y confirmaciones de agentes
 export const CHOICE_REGEX = /(?:\bPermitir\b|\bAllow\b|\bDeny\b|\bRechazar\b|\[Y\/n\]|\[y\/N\]|\(y\/n\)|Do you want to|¿Deseas continuar|1\.\s*(?:Yes|Sí|Permitir)|What should .* do instead)/i;
 
-// Patrones heurísticos para detectar prompts listos de agentes o shells
-export const PROMPT_READY_REGEX = /(?:\? for shortcuts|[❯›>]\s*$|PS [A-Z]:\\[^\n]*>\s*$|╭─|╰─)/m;
+// Patrones heurísticos de indicadores de ejecución activa (si aparecen en las líneas recientes, el agente SIGUE TRABAJANDO)
+export const ACTIVE_EXECUTION_REGEX = /(?:thinking\b|\bthought for\b|\brunning tool\b|\bcalling tool\b|\bexecuting\b|\breading file\b|\bediting\b|\bwriting\b|\bcompiling\b|\bbuilding\b|\bsearching\b|\bfetching\b|\besc to cancel\b|\besc to interrupt\b|\bctrl\+c to interrupt\b|\bin progress\b)/i;
+
+// Patrones heurísticos para detectar prompts listos finales de agentes o shells esperando input de usuario
+export const PROMPT_READY_REGEX = /(?:[❯›$%]\s*$|PS [A-Z]:\\[^\r\n]*>\s*$|[A-Z]:\\[^\r\n]*>\s*$|\? for shortcuts\s*$|\(y\/n\)\s*$)/;
 
 /**
  * Reproductor de tonos sutiles mediante Web Audio API puro (sin dependencias ni archivos externos)
@@ -102,7 +105,8 @@ export class CliActivityTracker {
 
   private activityStartTime: number = 0;
   private tailBuffer: string = "";
-  private inactivityTimer: number | null = null;
+  private choiceTimer: number | null = null;
+  private finishTimer: number | null = null;
 
   private lastNotifiedType: CliNotificationType | null = null;
   private lastNotifiedSnippet: string = "";
@@ -132,17 +136,28 @@ export class CliActivityTracker {
       this.activityStartTime = now;
     }
 
-    // Mantener cola de los últimos 1200 caracteres para análisis tras stripAnsi
-    this.tailBuffer = (this.tailBuffer + chunk).slice(-1200);
+    // Mantener cola de los últimos 1500 caracteres para análisis tras stripAnsi
+    this.tailBuffer = (this.tailBuffer + chunk).slice(-1500);
 
-    // Cancelar temporizador previo y programar evaluación tras 400ms de inactividad
-    if (this.inactivityTimer !== null) {
-      clearTimeout(this.inactivityTimer);
+    // Cancelar temporizadores previos
+    if (this.choiceTimer !== null) {
+      clearTimeout(this.choiceTimer);
+      this.choiceTimer = null;
+    }
+    if (this.finishTimer !== null) {
+      clearTimeout(this.finishTimer);
+      this.finishTimer = null;
     }
 
-    this.inactivityTimer = window.setTimeout(() => {
-      this.evaluateInactivity(onNotification);
-    }, 400);
+    // 1. Evaluación rápida tras 450ms para preguntas interactivas ([Y/n], Allow/Deny, etc.)
+    this.choiceTimer = window.setTimeout(() => {
+      this.evaluateChoice(onNotification);
+    }, 450);
+
+    // 2. Evaluación tras 2000ms de silencio para determinar finalización real
+    this.finishTimer = window.setTimeout(() => {
+      this.evaluateFinished(onNotification);
+    }, 2000);
   }
 
   /**
@@ -188,33 +203,87 @@ export class CliActivityTracker {
     this.lastNotifiedType = null;
     this.lastNotifiedSnippet = "";
     this.activityStartTime = 0;
+    if (this.choiceTimer !== null) {
+      clearTimeout(this.choiceTimer);
+      this.choiceTimer = null;
+    }
+    if (this.finishTimer !== null) {
+      clearTimeout(this.finishTimer);
+      this.finishTimer = null;
+    }
   }
 
   /**
-   * Evalúa los últimos 600 caracteres limpios tras 400ms de inactividad
+   * Evalúa si el agente CLI se detuvo esperando confirmación interactiva ([Y/n], Permitir, etc.)
    */
-  private evaluateInactivity(
-    onNotification: (event: CliNotificationEvent) => void
-  ) {
+  private evaluateChoice(onNotification: (event: CliNotificationEvent) => void) {
+    const cleanTail = stripAnsi(this.tailBuffer.slice(-600));
+    const lines = cleanTail
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    if (lines.length === 0) return;
+
+    // Analizar las últimas 4 líneas recientes
+    const recentTail = lines.slice(-4).join("\n");
+    if (CHOICE_REGEX.test(recentTail)) {
+      const snippet = extractCleanSnippet(recentTail) || "Esperando confirmación...";
+      this.emitNotification("eleccion", snippet, onNotification);
+      // Cancelar timer de finalizado si estamos esperando una elección
+      if (this.finishTimer !== null) {
+        clearTimeout(this.finishTimer);
+        this.finishTimer = null;
+      }
+    }
+  }
+
+  /**
+   * Evalúa si una tarea prolongada realmente finalizó tras inactividad sostenida (2000ms)
+   */
+  private evaluateFinished(onNotification: (event: CliNotificationEvent) => void) {
     const now = Date.now();
     const duration = now - this.activityStartTime;
-    const cleanTail = stripAnsi(this.tailBuffer.slice(-600));
+    const cleanTail = stripAnsi(this.tailBuffer.slice(-800));
 
-    // 1. Detección de Elección / Confirmación Interactiva (Permitir, [Y/n], etc.)
-    if (CHOICE_REGEX.test(cleanTail)) {
-      const snippet = extractCleanSnippet(cleanTail) || "Esperando confirmación...";
-      this.emitNotification("eleccion", snippet, onNotification);
+    // Si la actividad previa fue muy breve (< 2000ms), no emitir notificación de tarea finalizada
+    if (duration < 2000) {
+      this.activityStartTime = 0;
       return;
     }
 
-    // 2. Detección de Tarea Finalizada tras actividad prolongada (> 3000ms)
-    if (duration >= 3000 && PROMPT_READY_REGEX.test(cleanTail)) {
+    const lines = cleanTail
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    if (lines.length === 0) {
+      this.activityStartTime = 0;
+      return;
+    }
+
+    const lastLine = lines[lines.length - 1];
+
+    // Descartar si las últimas líneas contienen indicadores de ejecución activa (ej. Thinking, Running tool, etc.)
+    const recentTail = lines.slice(-4).join("\n");
+    if (ACTIVE_EXECUTION_REGEX.test(recentTail)) {
+      // El agente aún está procesando, llamando herramientas o editando
+      return;
+    }
+
+    // Descartar si la última línea es un marco o decorador de caja TUI
+    if (/^[╭╰│─┌└═─\s]+$/.test(lastLine)) {
+      return;
+    }
+
+    // Verificar si la última línea corresponde a un prompt interactivo listo
+    if (PROMPT_READY_REGEX.test(lastLine)) {
       const snippet = extractCleanSnippet(cleanTail) || "Tarea finalizada con éxito";
       this.emitNotification("finalizado", snippet, onNotification);
       return;
     }
 
-    // Reiniciar ventana de actividad si el buffer se estabilizó sin eventos
+    // Si pasaron 2 segundos y el terminal se estabilizó sin match, resetear
     this.activityStartTime = 0;
   }
 
@@ -252,9 +321,13 @@ export class CliActivityTracker {
   }
 
   public dispose() {
-    if (this.inactivityTimer !== null) {
-      clearTimeout(this.inactivityTimer);
-      this.inactivityTimer = null;
+    if (this.choiceTimer !== null) {
+      clearTimeout(this.choiceTimer);
+      this.choiceTimer = null;
+    }
+    if (this.finishTimer !== null) {
+      clearTimeout(this.finishTimer);
+      this.finishTimer = null;
     }
   }
 }

@@ -1557,6 +1557,15 @@ class VayliIslandApp {
     const outputUnlisten = await listen<string>(`pty-output-${sessionId}`, (event) => {
       pane.writeBatched(event.payload);
 
+      // Si había una notificación activa de "finalizado" en esta sesión y continúan llegando datos, descartarla
+      if (
+        this.activeCliNotification &&
+        this.activeCliNotification.sessionId === sessionId &&
+        this.activeCliNotification.type === "finalizado"
+      ) {
+        this.dismissCliNotification(true);
+      }
+
       // Alimentar detector heurístico de agentes CLI
       cliTracker.feedData(event.payload, (notif) => this.handleCliNotification(notif));
 
