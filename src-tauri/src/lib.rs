@@ -249,6 +249,26 @@ fn set_active_monitor(
     window::set_active_monitor_by_index(&window, state, monitor_index)
 }
 
+#[tauri::command]
+fn set_expanded_dimensions(
+    window: WebviewWindow,
+    width: f64,
+    height: f64,
+) -> Result<(), String> {
+    let safe_w = width.clamp(600.0, 1400.0);
+    let safe_h = height.clamp(250.0, 800.0);
+    window::set_expanded_dimensions_internal(safe_w, safe_h);
+
+    let _ = window.set_resizable(true);
+    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(safe_w, safe_h)));
+    let _ = window.set_resizable(false);
+
+    // Ajustar posición para mantener el centrado o anclaje según el DockPosition
+    let _ = window::update_island_geometry(&window, window::IslandState::Expanded);
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let pty_manager = PtyManager::new();
@@ -442,7 +462,8 @@ pub fn run() {
             snap_window_to_nearest_edge,
             get_system_metrics,
             get_available_monitors,
-            set_active_monitor
+            set_active_monitor,
+            set_expanded_dimensions
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

@@ -32,6 +32,28 @@ pub fn set_dock_position(pos: DockPosition) {
     *CURRENT_DOCK_POSITION.lock() = pos;
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct ExpandedDimensions {
+    pub width: f64,
+    pub height: f64,
+}
+
+static EXPANDED_DIMENSIONS: Mutex<ExpandedDimensions> = Mutex::new(ExpandedDimensions {
+    width: 850.0,
+    height: 360.0,
+});
+
+pub fn get_expanded_dimensions() -> (f64, f64) {
+    let dims = *EXPANDED_DIMENSIONS.lock();
+    (dims.width, dims.height)
+}
+
+pub fn set_expanded_dimensions_internal(width: f64, height: f64) {
+    let mut dims = EXPANDED_DIMENSIONS.lock();
+    dims.width = width.clamp(600.0, 1400.0);
+    dims.height = height.clamp(250.0, 800.0);
+}
+
 pub fn is_show_over_fullscreen() -> bool {
     SHOW_OVER_FULLSCREEN.load(Ordering::SeqCst)
 }
@@ -74,10 +96,11 @@ pub fn update_island_geometry_on_monitor(
 
     let (phys_w, phys_h, phys_x, phys_y) = match dock_pos {
         DockPosition::TopCenter | DockPosition::TopLeft | DockPosition::TopRight => {
+            let (exp_w, exp_h) = get_expanded_dimensions();
             let (logical_w, logical_h) = match state {
                 IslandState::Collapsed => (260.0, 34.0),
                 IslandState::Glance => (420.0, 64.0),
-                IslandState::Expanded => (850.0, 360.0),
+                IslandState::Expanded => (exp_w, exp_h),
             };
 
             let pw = (logical_w * scale_factor).round() as u32;
@@ -119,9 +142,10 @@ pub fn update_island_geometry_on_monitor(
                 let py = monitor_pos.y + (available_h * safe_ratio).round() as i32;
                 (pw, ph, px, py)
             } else {
-                // Expanded (850x360) desplegándose hacia la derecha, centrado verticalmente con la píldora
-                let pw = (850.0 * scale_factor).round() as u32;
-                let ph = (360.0 * scale_factor).round() as u32;
+                // Expanded (redimensionable) desplegándose hacia la derecha, centrado verticalmente con la píldora
+                let (exp_w, exp_h) = get_expanded_dimensions();
+                let pw = (exp_w * scale_factor).round() as u32;
+                let ph = (exp_h * scale_factor).round() as u32;
                 let px = monitor_pos.x + (4.0 * scale_factor).round() as i32;
 
                 let pill_h = (260.0 * scale_factor).round() as f32;
@@ -156,9 +180,10 @@ pub fn update_island_geometry_on_monitor(
                 let py = monitor_pos.y + (available_h * safe_ratio).round() as i32;
                 (pw, ph, px, py)
             } else {
-                // Expanded (850x360) desplegándose hacia la izquierda, centrado verticalmente con la píldora
-                let pw = (850.0 * scale_factor).round() as u32;
-                let ph = (360.0 * scale_factor).round() as u32;
+                // Expanded (redimensionable) desplegándose hacia la izquierda, centrado verticalmente con la píldora
+                let (exp_w, exp_h) = get_expanded_dimensions();
+                let pw = (exp_w * scale_factor).round() as u32;
+                let ph = (exp_h * scale_factor).round() as u32;
                 let px = monitor_pos.x + monitor_size.width as i32 - pw as i32 - (4.0 * scale_factor).round() as i32;
 
                 let pill_h = (260.0 * scale_factor).round() as f32;

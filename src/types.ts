@@ -37,6 +37,8 @@ export interface ObsidianSettings {
   cliNotifications?: boolean;
   notificationSound?: boolean;
   dockPosition?: DockPosition;
+  expandedWidth?: number;
+  expandedHeight?: number;
 }
 
 export interface SystemMetrics {

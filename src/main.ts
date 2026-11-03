@@ -296,6 +296,19 @@ class VayliIslandApp {
     }
 
     await this.refreshMonitorsList();
+
+    // Restaurar dimensiones expandidas personalizadas si existen (Fase 27)
+    if (this.settings.expandedWidth || this.settings.expandedHeight) {
+      const expW = this.settings.expandedWidth || 850;
+      const expH = this.settings.expandedHeight || 360;
+      this.islandContainer.style.setProperty("--expanded-width", `${expW}px`);
+      this.islandContainer.style.setProperty("--expanded-height", `${expH}px`);
+      try {
+        await invoke("set_expanded_dimensions", { width: expW, height: expH });
+      } catch (err) {
+        console.debug("Error al sincronizar dimensiones expandidas iniciales:", err);
+      }
+    }
   }
 
   private async refreshMonitorsList() {
@@ -946,6 +959,9 @@ class VayliIslandApp {
     // Configurar arrastre libre y acoplamiento magnético (Magnetic Snap Docking)
     this.setupDragAndSnap();
 
+    // Configurar redimensionamiento manual interactivo del HUD (Fase 27)
+    this.initResizeHandles();
+
     // Escuchar solicitud de salida del System Tray
     listen("tray-quit-requested", async () => {
       if (this.settings.restoreSessionOnStartup) {
@@ -1132,7 +1148,7 @@ class VayliIslandApp {
       const target = e.target as HTMLElement;
       if (
         target.closest(
-          "button, input, select, .tab-item, .tab-close-btn, .shell-menu-popover, .settings-popover, .terminal-search-bar"
+          "button, input, select, .tab-item, .tab-close-btn, .shell-menu-popover, .settings-popover, .terminal-search-bar, .resize-handle"
         )
       ) {
         return;
@@ -1209,6 +1225,117 @@ class VayliIslandApp {
         }, 160);
       }
     });
+  }
+
+  private initResizeHandles() {
+    const handleRight = document.getElementById("resize-right");
+    const handleBottom = document.getElementById("resize-bottom");
+    const handleCorner = document.getElementById("resize-corner");
+
+    if (!handleRight || !handleBottom || !handleCorner) return;
+
+    let isResizing = false;
+    let resizeType: "right" | "bottom" | "corner" | null = null;
+    let startX = 0;
+    let startY = 0;
+    let startW = 0;
+    let startH = 0;
+    let currentNewW = 0;
+    let currentNewH = 0;
+    let activeHandleEl: HTMLElement | null = null;
+
+    const onMouseDown = (type: "right" | "bottom" | "corner", handleEl: HTMLElement, e: MouseEvent) => {
+      if (this.currentMode !== "expanded") return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      isResizing = true;
+      resizeType = type;
+      activeHandleEl = handleEl;
+      activeHandleEl.classList.add("active");
+
+      startX = e.clientX;
+      startY = e.clientY;
+      startW = this.islandContainer.offsetWidth;
+      startH = this.islandContainer.offsetHeight;
+      currentNewW = startW;
+      currentNewH = startH;
+
+      document.body.style.userSelect = "none";
+      if (type === "right") document.body.style.cursor = "ew-resize";
+      else if (type === "bottom") document.body.style.cursor = "ns-resize";
+      else if (type === "corner") document.body.style.cursor = "se-resize";
+
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isResizing || !resizeType) return;
+      e.preventDefault();
+
+      if (resizeType === "right" || resizeType === "corner") {
+        const deltaX = e.clientX - startX;
+        currentNewW = Math.min(1400, Math.max(600, Math.round(startW + deltaX)));
+        this.islandContainer.style.setProperty("--expanded-width", `${currentNewW}px`);
+      }
+
+      if (resizeType === "bottom" || resizeType === "corner") {
+        const deltaY = e.clientY - startY;
+        currentNewH = Math.min(800, Math.max(250, Math.round(startH + deltaY)));
+        this.islandContainer.style.setProperty("--expanded-height", `${currentNewH}px`);
+      }
+
+      // Reajuste fluido en tiempo real de los paneles PTY
+      this.fitActiveTabPanes(false);
+    };
+
+    const onMouseUp = async () => {
+      if (!isResizing) return;
+      isResizing = false;
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      if (activeHandleEl) {
+        activeHandleEl.classList.remove("active");
+        activeHandleEl = null;
+      }
+
+      const finalW = currentNewW || this.islandContainer.offsetWidth;
+      const finalH = currentNewH || this.islandContainer.offsetHeight;
+
+      this.settings.expandedWidth = finalW;
+      this.settings.expandedHeight = finalH;
+      this.saveSettings();
+
+      try {
+        await invoke("set_expanded_dimensions", {
+          width: finalW,
+          height: finalH,
+        });
+      } catch (err) {
+        console.debug("Error al persistir dimensiones de ventana expandida:", err);
+      }
+
+      // Sincronización PTY definitiva y auto-anclaje al final del buffer
+      this.fitActiveTabPanes(true);
+      if (this.activeTabId) {
+        const activeTab = this.tabs.get(this.activeTabId);
+        if (activeTab) {
+          activeTab.panes.forEach((pane) => {
+            pane.terminal.scrollToBottom();
+            const vp = pane.element.querySelector(".xterm-viewport") as HTMLElement;
+            if (vp) vp.scrollTop = vp.scrollHeight;
+          });
+        }
+      }
+    };
+
+    handleRight.addEventListener("mousedown", (e) => onMouseDown("right", handleRight, e));
+    handleBottom.addEventListener("mousedown", (e) => onMouseDown("bottom", handleBottom, e));
+    handleCorner.addEventListener("mousedown", (e) => onMouseDown("corner", handleCorner, e));
   }
 
   public toggleSearchBar() {
