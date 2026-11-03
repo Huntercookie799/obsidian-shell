@@ -175,6 +175,7 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
     cursorWidth: 2,
     allowTransparency: true,
     scrollback: 2500,
+    allowProposedApi: true,
   });
 
   const fitAddon = new FitAddon();
@@ -185,11 +186,14 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
   terminal.loadAddon(fitAddon);
   terminal.loadAddon(searchAddon);
   terminal.loadAddon(serializeAddon);
-  terminal.loadAddon(unicode11Addon);
+  try {
+    terminal.loadAddon(unicode11Addon);
+    // Activar soporte Unicode 11 para cálculo exacto de ancho de glifos Nerd Fonts y emojis
+    terminal.unicode.activeVersion = "11";
+  } catch (err) {
+    console.debug("[Unicode11] Error al registrar addon Unicode 11:", err);
+  }
   terminal.loadAddon(new WebLinksAddon());
-
-  // Activar soporte Unicode 11 para cálculo exacto de ancho de glifos Nerd Fonts y emojis
-  terminal.unicode.activeVersion = "11";
 
   // Control de scroll y auto-anclaje al final del buffer
   let isUserScrolledUp = false;

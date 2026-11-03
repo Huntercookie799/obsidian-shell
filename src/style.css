@@ -118,6 +118,46 @@ html, body {
   border-radius: 17px 0 0 17px;
 }
 
+/* Glance state on Left & Right Edges */
+#island-container.state-glance.dock-vertical-left {
+  width: 420px;
+  height: 260px;
+  border-radius: 0 20px 20px 0;
+}
+
+#island-container.state-glance.dock-vertical-right {
+  width: 420px;
+  height: 260px;
+  border-radius: 20px 0 0 20px;
+}
+
+#island-container.state-glance.dock-vertical-left .notch-glance,
+#island-container.state-glance.dock-vertical-right .notch-glance {
+  width: 100%;
+  height: 260px;
+  padding: 16px 18px;
+  justify-content: space-between;
+  box-sizing: border-box;
+}
+
+#island-container.state-glance.dock-vertical-left .glance-bottom,
+#island-container.state-glance.dock-vertical-right .glance-bottom {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+}
+
+#island-container.state-glance.dock-vertical-left .glance-snippet,
+#island-container.state-glance.dock-vertical-right .glance-snippet {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  line-height: 1.45;
+  width: 100%;
+}
+
 #island-container.state-collapsed.dock-vertical-left #notch-pill,
 #island-container.state-collapsed.dock-vertical-right #notch-pill {
   flex-direction: column;

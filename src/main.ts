@@ -597,7 +597,18 @@ class VayliIslandApp {
       }
     });
 
+    this.notchPill.addEventListener("mouseleave", () => {
+      if (this.hoverTimer) {
+        clearTimeout(this.hoverTimer);
+        this.hoverTimer = null;
+      }
+    });
+
     this.islandContainer.addEventListener("mouseenter", () => {
+      if (this.leaveTimer) {
+        clearTimeout(this.leaveTimer);
+        this.leaveTimer = null;
+      }
       if (this.autoCollapseTimer) {
         clearTimeout(this.autoCollapseTimer);
         this.autoCollapseTimer = null;

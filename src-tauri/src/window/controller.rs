@@ -109,19 +109,27 @@ pub fn update_island_geometry_on_monitor(
                 let available_h = monitor_size.height.saturating_sub(ph) as f32;
                 let py = monitor_pos.y + (available_h * safe_ratio).round() as i32;
                 (pw, ph, px, py)
+            } else if state == IslandState::Glance {
+                // Modo Glance Lateral: 420x260 desplegándose hacia la derecha.
+                // Mantiene exactamente la misma altura (260px) y coordenada Y de Collapsed para evitar saltos o pérdida del cursor
+                let pw = (420.0 * scale_factor).round() as u32;
+                let ph = (260.0 * scale_factor).round() as u32;
+                let px = monitor_pos.x + (4.0 * scale_factor).round() as i32;
+                let available_h = monitor_size.height.saturating_sub(ph) as f32;
+                let py = monitor_pos.y + (available_h * safe_ratio).round() as i32;
+                (pw, ph, px, py)
             } else {
-                // Glance (420x64) o Expanded (850x480) desplegándose hacia la derecha
-                let (logical_w, logical_h) = match state {
-                    IslandState::Glance => (420.0, 64.0),
-                    IslandState::Expanded => (850.0, 480.0),
-                    _ => unreachable!(),
-                };
-                let pw = (logical_w * scale_factor).round() as u32;
-                let ph = (logical_h * scale_factor).round() as u32;
+                // Expanded (850x480) desplegándose hacia la derecha, centrado verticalmente con la píldora
+                let pw = (850.0 * scale_factor).round() as u32;
+                let ph = (480.0 * scale_factor).round() as u32;
                 let px = monitor_pos.x + (4.0 * scale_factor).round() as i32;
 
-                let target_center_y = monitor_pos.y as f32 + (monitor_size.height as f32 * safe_ratio);
-                let ideal_y = (target_center_y - (ph as f32 / 2.0)).round() as i32;
+                let pill_h = (260.0 * scale_factor).round() as f32;
+                let available_h_pill = monitor_size.height.saturating_sub(pill_h as u32) as f32;
+                let pill_top_y = monitor_pos.y as f32 + (available_h_pill * safe_ratio);
+                let pill_center_y = pill_top_y + (pill_h / 2.0);
+
+                let ideal_y = (pill_center_y - (ph as f32 / 2.0)).round() as i32;
                 let min_y = monitor_pos.y + (8.0 * scale_factor).round() as i32;
                 let max_y = monitor_pos.y + monitor_size.height as i32 - ph as i32 - (8.0 * scale_factor).round() as i32;
                 let py = ideal_y.clamp(min_y, max_y.max(min_y));
@@ -138,19 +146,27 @@ pub fn update_island_geometry_on_monitor(
                 let available_h = monitor_size.height.saturating_sub(ph) as f32;
                 let py = monitor_pos.y + (available_h * safe_ratio).round() as i32;
                 (pw, ph, px, py)
+            } else if state == IslandState::Glance {
+                // Modo Glance Lateral: 420x260 desplegándose hacia la izquierda.
+                // Mantiene exactamente la misma altura (260px) y coordenada Y de Collapsed para evitar saltos o pérdida del cursor
+                let pw = (420.0 * scale_factor).round() as u32;
+                let ph = (260.0 * scale_factor).round() as u32;
+                let px = monitor_pos.x + monitor_size.width as i32 - pw as i32 - (4.0 * scale_factor).round() as i32;
+                let available_h = monitor_size.height.saturating_sub(ph) as f32;
+                let py = monitor_pos.y + (available_h * safe_ratio).round() as i32;
+                (pw, ph, px, py)
             } else {
-                // Glance (420x64) o Expanded (850x480) desplegándose hacia la izquierda
-                let (logical_w, logical_h) = match state {
-                    IslandState::Glance => (420.0, 64.0),
-                    IslandState::Expanded => (850.0, 480.0),
-                    _ => unreachable!(),
-                };
-                let pw = (logical_w * scale_factor).round() as u32;
-                let ph = (logical_h * scale_factor).round() as u32;
+                // Expanded (850x480) desplegándose hacia la izquierda, centrado verticalmente con la píldora
+                let pw = (850.0 * scale_factor).round() as u32;
+                let ph = (480.0 * scale_factor).round() as u32;
                 let px = monitor_pos.x + monitor_size.width as i32 - pw as i32 - (4.0 * scale_factor).round() as i32;
 
-                let target_center_y = monitor_pos.y as f32 + (monitor_size.height as f32 * safe_ratio);
-                let ideal_y = (target_center_y - (ph as f32 / 2.0)).round() as i32;
+                let pill_h = (260.0 * scale_factor).round() as f32;
+                let available_h_pill = monitor_size.height.saturating_sub(pill_h as u32) as f32;
+                let pill_top_y = monitor_pos.y as f32 + (available_h_pill * safe_ratio);
+                let pill_center_y = pill_top_y + (pill_h / 2.0);
+
+                let ideal_y = (pill_center_y - (ph as f32 / 2.0)).round() as i32;
                 let min_y = monitor_pos.y + (8.0 * scale_factor).round() as i32;
                 let max_y = monitor_pos.y + monitor_size.height as i32 - ph as i32 - (8.0 * scale_factor).round() as i32;
                 let py = ideal_y.clamp(min_y, max_y.max(min_y));
