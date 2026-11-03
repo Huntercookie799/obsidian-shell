@@ -630,7 +630,16 @@ class VayliIslandApp {
         clearTimeout(this.autoCollapseTimer);
         this.autoCollapseTimer = null;
       }
-      if (this.notificationDismissTimer) {
+      // Para notificaciones informativas de tipo 'finalizado', reprogramar temporizador de repliegue
+      // para evitar que la notificación quede pegada si el cursor descansaba sobre el área del HUD
+      if (this.activeCliNotification && this.activeCliNotification.type === "finalizado") {
+        if (this.notificationDismissTimer) clearTimeout(this.notificationDismissTimer);
+        this.notificationDismissTimer = window.setTimeout(() => {
+          if (this.currentMode === "glance") {
+            this.dismissCliNotification(true);
+          }
+        }, 4000);
+      } else if (this.notificationDismissTimer) {
         clearTimeout(this.notificationDismissTimer);
         this.notificationDismissTimer = null;
       }
@@ -670,6 +679,11 @@ class VayliIslandApp {
 
     this.notchGlance.addEventListener("click", () => {
       if (this.leaveTimer) clearTimeout(this.leaveTimer);
+      if (this.activeCliNotification) {
+        const targetTabId = this.activeCliNotification.tabId;
+        this.dismissCliNotification(false);
+        this.switchTab(targetTabId);
+      }
       this.setMode("expanded");
     });
 
@@ -1072,6 +1086,7 @@ class VayliIslandApp {
           e.preventDefault();
           this.shellMenuPopover.classList.add("hidden");
           this.settingsPopover.classList.add("hidden");
+          this.dismissCliNotification(true);
           this.setMode("collapsed");
           return;
         }

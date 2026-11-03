@@ -69,12 +69,19 @@ export function updateTerminalAccentTheme(terminal: Terminal, hex: string) {
 }
 
 /**
- * Strips ANSI escape sequences, control chars, and OSC title strings
+ * Strips ANSI escape sequences, control chars, OSC title strings, and orphaned ANSI fragments
  */
 export function stripAnsi(text: string): string {
   return text
-    .replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, "")
-    .replace(/\x1B\][0-9];[^\x07]*\x07/g, "")
+    // Secuencias CSI y de color completas (incluyendo 24-bit truecolor y modos extendidos)
+    .replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~]/g, "")
+    // Secuencias OSC (títulos, notificaciones)
+    .replace(/\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)/g, "")
+    // Secuencias de control generales ESC + caracter
+    .replace(/\x1B[@-Z\\-_]/g, "")
+    // Limpieza de secuencias huérfanas o incompletas de chunks truncados (ej. "5;221;255m")
+    .replace(/[0-9]+;[0-9;]+m/g, "")
+    .replace(/^[0-9;]+m/g, "")
     .replace(/[\r\n]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();

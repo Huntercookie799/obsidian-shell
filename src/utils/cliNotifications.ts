@@ -82,10 +82,12 @@ export function extractCleanSnippet(text: string, maxLength = 65): string {
   const questionLine = [...lines].reverse().find((l) => CHOICE_REGEX.test(l) || l.includes("?"));
   const target = questionLine || lines[lines.length - 1];
 
-  // Limpiar caracteres decorativos de cajas TUI como ╭ ╰ │ ─ ┌ └
+  // Limpiar caracteres decorativos de cajas TUI como ╭ ╰ │ ─ ┌ └, fragmentos ANSI huérfanos y símbolos
   const cleaned = target
-    .replace(/^[╭╰│─┌└\s>❯›]+/, "")
-    .replace(/[╭╰│─┌└]+$/, "")
+    .replace(/^[╭╰│─┌└═─\s>❯›]+/, "")
+    .replace(/[╭╰│─┌└═─]+$/, "")
+    .replace(/[0-9]+;[0-9;]+m/g, "")
+    .replace(/^[0-9;]+m/g, "")
     .trim();
 
   if (cleaned.length > maxLength) {
@@ -107,6 +109,7 @@ export class CliActivityTracker {
   private tailBuffer: string = "";
   private choiceTimer: number | null = null;
   private finishTimer: number | null = null;
+  private hasUserInput: boolean = false;
 
   private lastNotifiedType: CliNotificationType | null = null;
   private lastNotifiedSnippet: string = "";
@@ -200,9 +203,10 @@ export class CliActivityTracker {
    * Se llama cuando el usuario envía una entrada para resetear el estado notificado
    */
   public onUserInput() {
+    this.hasUserInput = true;
     this.lastNotifiedType = null;
     this.lastNotifiedSnippet = "";
-    this.activityStartTime = 0;
+    this.activityStartTime = Date.now();
     if (this.choiceTimer !== null) {
       clearTimeout(this.choiceTimer);
       this.choiceTimer = null;
@@ -242,6 +246,12 @@ export class CliActivityTracker {
    * Evalúa si una tarea prolongada realmente finalizó tras inactividad sostenida (2000ms)
    */
   private evaluateFinished(onNotification: (event: CliNotificationEvent) => void) {
+    // Si el usuario no ha ejecutado comandos en este panel, se trata del arranque inicial del shell (ignorar)
+    if (!this.hasUserInput) {
+      this.activityStartTime = 0;
+      return;
+    }
+
     const now = Date.now();
     const duration = now - this.activityStartTime;
     const cleanTail = stripAnsi(this.tailBuffer.slice(-800));
@@ -278,6 +288,7 @@ export class CliActivityTracker {
 
     // Verificar si la última línea corresponde a un prompt interactivo listo
     if (PROMPT_READY_REGEX.test(lastLine)) {
+      this.hasUserInput = false; // Resetear para esperar el próximo comando del usuario
       const snippet = extractCleanSnippet(cleanTail) || "Tarea finalizada con éxito";
       this.emitNotification("finalizado", snippet, onNotification);
       return;
