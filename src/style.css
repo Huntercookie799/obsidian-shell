@@ -989,7 +989,20 @@ html, body {
   line-height: 1;
 }
 
-/* Xterm Overrides */
+/* Xterm Overrides & Absolute Transparency Hierarchy (Fase 30.1) */
+.terminal-pane .xterm,
+.terminal-instance .xterm,
+.xterm,
+.xterm-viewport,
+.xterm-screen,
+.xterm-text-layer,
+.xterm-cursor-layer,
+.xterm-link-layer,
+.xterm-selection-layer {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
 .terminal-pane .xterm,
 .terminal-instance .xterm,
 .xterm {
@@ -1008,12 +1021,25 @@ html, body {
 .terminal-pane .xterm-viewport,
 .terminal-instance .xterm-viewport,
 .xterm-viewport {
+  background: transparent !important;
   background-color: transparent !important;
   scrollbar-width: thin;
   scrollbar-color: #27272E transparent;
   max-height: 100% !important;
   overflow-y: auto !important;
   box-sizing: border-box !important;
+}
+
+.terminal-pane .xterm-screen,
+.xterm-screen {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+.terminal-pane .xterm-screen canvas,
+.xterm-screen canvas {
+  background: transparent !important;
+  background-color: transparent !important;
 }
 
 /* Quick Shell Selection Popover */

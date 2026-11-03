@@ -967,7 +967,7 @@ class VayliIslandApp {
       }
     });
 
-    this.islandContainer.addEventListener("mouseenter", () => {
+    const cancelAllLeaveTimers = () => {
       if (this.leaveTimer) {
         clearTimeout(this.leaveTimer);
         this.leaveTimer = null;
@@ -976,6 +976,14 @@ class VayliIslandApp {
         clearTimeout(this.autoCollapseTimer);
         this.autoCollapseTimer = null;
       }
+      if (this.hoverTimer) {
+        clearTimeout(this.hoverTimer);
+        this.hoverTimer = null;
+      }
+    };
+
+    this.islandContainer.addEventListener("mouseenter", () => {
+      cancelAllLeaveTimers();
       // Para notificaciones informativas de tipo 'finalizado', reprogramar temporizador de repliegue
       // para evitar que la notificación quede pegada si el cursor descansaba sobre el área del HUD
       if (this.activeCliNotification && this.activeCliNotification.type === "finalizado") {
@@ -983,6 +991,7 @@ class VayliIslandApp {
         this.notificationDismissTimer = window.setTimeout(() => {
           if (this.currentMode === "glance") {
             this.dismissCliNotification(true);
+            this.setMode("collapsed");
           }
         }, 4000);
       } else if (this.notificationDismissTimer) {
@@ -991,18 +1000,33 @@ class VayliIslandApp {
       }
     });
 
-    this.islandContainer.addEventListener("mouseleave", () => {
+    this.shellMenuPopover.addEventListener("mouseenter", cancelAllLeaveTimers);
+    this.folderMenuPopover.addEventListener("mouseenter", cancelAllLeaveTimers);
+    this.settingsPopover.addEventListener("mouseenter", cancelAllLeaveTimers);
+
+    this.islandContainer.addEventListener("mouseleave", (e: MouseEvent) => {
       if (this.hoverTimer) {
         clearTimeout(this.hoverTimer);
         this.hoverTimer = null;
       }
+
+      // Si el cursor se movió hacia un elemento hijo interno o popover, ignorar
+      const related = e.relatedTarget as Node | null;
+      if (related && this.islandContainer.contains(related)) {
+        return;
+      }
+
       if (this.currentMode === "glance") {
         if (this.activeCliNotification && this.activeCliNotification.type === "eleccion") {
           return;
         }
+        if (this.leaveTimer) {
+          clearTimeout(this.leaveTimer);
+        }
         this.leaveTimer = window.setTimeout(() => {
           if (this.currentMode === "glance") {
             this.dismissCliNotification(true);
+            this.setMode("collapsed");
           }
         }, 200);
       } else if (this.currentMode === "expanded" && this.settings.autoCollapseOnLeave) {
@@ -1011,16 +1035,17 @@ class VayliIslandApp {
         }
         this.autoCollapseTimer = window.setTimeout(() => {
           if (this.currentMode === "expanded") {
-            // No auto-colapsar si la ventana tiene el foco del usuario o la terminal está activa
-            const isWindowFocused = document.hasFocus();
-            const isTerminalFocused = Boolean(
-              document.activeElement &&
-              (document.activeElement.classList.contains("xterm-helper-textarea") ||
-               document.activeElement.closest(".terminal-pane"))
-            );
-            if (!isWindowFocused && !isTerminalFocused) {
-              this.setMode("collapsed");
+            // Verificar si hay algún popover abierto o barra de búsqueda activa
+            const isAnyPopoverOpen =
+              !this.shellMenuPopover.classList.contains("hidden") ||
+              !this.folderMenuPopover.classList.contains("hidden") ||
+              !this.settingsPopover.classList.contains("hidden");
+
+            if (isAnyPopoverOpen || !this.searchBar.classList.contains("hidden")) {
+              return;
             }
+
+            this.setMode("collapsed");
           }
         }, 300);
       }
@@ -1466,11 +1491,27 @@ class VayliIslandApp {
       });
     }
 
-    document.addEventListener("click", () => {
-      this.shellMenuPopover.classList.add("hidden");
-      this.folderMenuPopover.classList.add("hidden");
-      this.settingsPopover.classList.add("hidden");
-    });
+    // Cerrar menús popover de inmediato al hacer clic fuera (en fase de captura sin bloquear la interacción)
+    window.addEventListener(
+      "pointerdown",
+      (e) => {
+        const target = e.target as HTMLElement | null;
+        if (!target) return;
+
+        const isInsidePopover = Boolean(
+          target.closest(
+            "#shell-menu-popover, #folder-menu-popover, #settings-popover, #btn-shell-menu, #btn-folder-menu, #btn-settings"
+          )
+        );
+
+        if (!isInsidePopover) {
+          this.shellMenuPopover.classList.add("hidden");
+          this.folderMenuPopover.classList.add("hidden");
+          this.settingsPopover.classList.add("hidden");
+        }
+      },
+      { capture: true }
+    );
 
     // Auto-enfocar la terminal activa al recuperar foco la ventana o al interactuar con el workspace
     window.addEventListener("focus", () => {

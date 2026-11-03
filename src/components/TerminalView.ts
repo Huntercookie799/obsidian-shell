@@ -62,6 +62,7 @@ export function updateTerminalAccentTheme(terminal: Terminal, hex: string) {
   const rgb = hexToRgb(hex) || { r: 255, g: 107, b: 0 };
   terminal.options.theme = {
     ...terminal.options.theme,
+    background: "transparent",
     cursor: hex,
     selectionBackground: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.25)`,
     selectionInactiveBackground: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15)`,
@@ -198,6 +199,7 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
   const rgb = hexToRgb(initialAccent) || { r: 255, g: 107, b: 0 };
   const dynamicTheme = {
     ...VAYLI_THEME,
+    background: "transparent",
     cursor: initialAccent,
     selectionBackground: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.25)`,
     selectionInactiveBackground: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15)`,
