@@ -1248,7 +1248,7 @@ class VayliIslandApp {
     }
 
     if (mode === "expanded") {
-      this.fitActiveTabPanes();
+      this.fitActiveTabPanes(true);
     }
   }
 
@@ -1471,7 +1471,7 @@ class VayliIslandApp {
     // Add new pane to tab
     await this.addPaneToTab(tab);
 
-    this.fitActiveTabPanes();
+    this.fitActiveTabPanes(true);
     this.updatePillSummary();
     this.scheduleAutoSave();
   }
@@ -1510,18 +1510,26 @@ class VayliIslandApp {
     return tab.panes.find((p) => p.id === tab.activePaneId) || tab.panes[0] || null;
   }
 
-  public fitActiveTabPanes() {
+  public fitActiveTabPanes(withTransitionSequence: boolean = false) {
     if (!this.activeTabId) return;
     const tab = this.tabs.get(this.activeTabId);
     if (!tab) return;
 
-    requestAnimationFrame(() => {
+    const executeFit = () => {
       tab.panes.forEach((pane) => {
         fitSafely(pane.terminal, pane.fitAddon, pane.sessionId, pane.isUserScrolledUp());
       });
       const active = this.getActivePane();
       if (active) active.terminal.focus();
-    });
+    };
+
+    requestAnimationFrame(executeFit);
+
+    // Ejecución diferida post-transición (60ms y 260ms al concluir transición CSS) para sincronizar SIGWINCH con Zsh y Fish
+    if (withTransitionSequence) {
+      window.setTimeout(executeFit, 60);
+      window.setTimeout(executeFit, 260);
+    }
   }
 
   public switchTab(tabId: string) {
@@ -1547,7 +1555,7 @@ class VayliIslandApp {
     this.scheduleAutoSave();
 
     if (this.currentMode === "expanded") {
-      this.fitActiveTabPanes();
+      this.fitActiveTabPanes(true);
     }
   }
 

@@ -51,6 +51,20 @@ impl PtyManager {
         let chosen_shell = shell_path.unwrap_or(default_shell);
         let mut cmd = CommandBuilder::new(&chosen_shell);
 
+        // Variables de entorno de terminal esenciales para Zsh (zle), Fish y autosuggestions
+        cmd.env("TERM", "xterm-256color");
+        cmd.env("COLORTERM", "truecolor");
+        cmd.env("TERM_PROGRAM", "ObsidianShell");
+
+        // Asegurar codificación UTF-8 para Linux/Unix
+        let user_lang = std::env::var("LANG").unwrap_or_default();
+        let user_lc_all = std::env::var("LC_ALL").unwrap_or_default();
+        if !user_lang.to_uppercase().contains("UTF-8") && !user_lc_all.to_uppercase().contains("UTF-8") {
+            cmd.env("LANG", "C.UTF-8");
+        } else if !user_lang.is_empty() {
+            cmd.env("LANG", user_lang);
+        }
+
         let home_dir = if cfg!(target_os = "windows") {
             std::env::var("USERPROFILE").ok()
         } else {
@@ -99,7 +113,11 @@ impl PtyManager {
         let reader_session_id = session_id.clone();
         let app_handle_clone = app_handle.clone();
         let child_arc = session.child.clone();
-        let shell_name_for_event = chosen_shell.clone();
+        let shell_name_for_event = std::path::Path::new(&chosen_shell)
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or(&chosen_shell)
+            .to_string();
 
         // Spawn background reader and batching thread
         std::thread::spawn(move || {
@@ -136,7 +154,14 @@ impl PtyManager {
                 let data_to_send = if accumulated.len() > MAX_BURST_BYTES {
                     let tail = &accumulated[accumulated.len() - MAX_BURST_BYTES..];
                     // Search for first '\n' within the last 256 KB to preserve line integrity
-                    let cut_pos = tail.iter().position(|&b| b == b'\n').map(|p| p + 1).unwrap_or(0);
+                    let raw_cut = tail.iter().position(|&b| b == b'\n').map(|p| p + 1).unwrap_or(0);
+                    
+                    // Asegurar límites de carácter UTF-8 válidos sin cortar secuencias multibyte
+                    let mut cut_pos = raw_cut;
+                    while cut_pos < tail.len() && (tail[cut_pos] & 0xC0) == 0x80 {
+                        cut_pos += 1;
+                    }
+
                     let mut sliced = Vec::with_capacity(b"\x1b[0m".len() + (tail.len() - cut_pos));
                     sliced.extend_from_slice(b"\x1b[0m");
                     sliced.extend_from_slice(&tail[cut_pos..]);

@@ -4,6 +4,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { SearchAddon } from "@xterm/addon-search";
 import { SerializeAddon } from "@xterm/addon-serialize";
+import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { invoke } from "@tauri-apps/api/core";
 import "@xterm/xterm/css/xterm.css";
 
@@ -143,9 +144,10 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
 
   const terminal = new Terminal({
     theme: dynamicTheme,
-    fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace",
+    fontFamily: "'JetBrainsMono Nerd Font', 'FiraCode Nerd Font', 'MesloLGS NF', 'Cascadia Code NF', 'Cascadia Mono', 'JetBrains Mono', 'Fira Code', 'DejaVu Sans Mono', 'Ubuntu Mono', monospace",
     fontSize: 13,
     lineHeight: 1.25,
+    letterSpacing: 0,
     cursorBlink: true,
     cursorStyle: "bar",
     cursorWidth: 2,
@@ -156,10 +158,16 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
   const fitAddon = new FitAddon();
   const searchAddon = new SearchAddon();
   const serializeAddon = new SerializeAddon();
+  const unicode11Addon = new Unicode11Addon();
+
   terminal.loadAddon(fitAddon);
   terminal.loadAddon(searchAddon);
   terminal.loadAddon(serializeAddon);
+  terminal.loadAddon(unicode11Addon);
   terminal.loadAddon(new WebLinksAddon());
+
+  // Activar soporte Unicode 11 para cálculo exacto de ancho de glifos Nerd Fonts y emojis
+  terminal.unicode.activeVersion = "11";
 
   // Control de scroll y auto-anclaje al final del buffer
   let isUserScrolledUp = false;
@@ -396,15 +404,20 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
       terminal.textarea.addEventListener("paste", pasteHandler, true);
     }
 
-    // Try WebGL acceleration with graceful Canvas/DOM fallback
+    // Intento de aceleración WebGL con fallback transparente a Canvas/DOM
     try {
       const webglAddon = new WebglAddon();
       webglAddon.onContextLoss(() => {
-        webglAddon.dispose();
+        console.debug(`[PTY ${currentSessionId}] Pérdida de contexto WebGL, revirtiendo a Canvas`);
+        try {
+          webglAddon.dispose();
+        } catch {
+          // Ignorar error al desechar contexto perdido
+        }
       });
       terminal.loadAddon(webglAddon);
     } catch (e) {
-      console.warn("WebGL addon not supported, falling back to Canvas renderer", e);
+      console.debug("WebGL no disponible o no soportado en este compositor, usando Canvas/DOM:", e);
     }
 
     container.appendChild(scrollBottomBtn);
