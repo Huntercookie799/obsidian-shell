@@ -11,6 +11,41 @@ use uuid::Uuid;
 
 use super::session::{PtySession, PtyStatusPayload};
 
+/// Encuentra el punto de corte seguro para evitar fragmentar caracteres UTF-8 multibyte
+fn find_incomplete_utf8_split(bytes: &[u8]) -> usize {
+    let len = bytes.len();
+    if len == 0 {
+        return 0;
+    }
+    let lookback = 3.min(len);
+    for i in 1..=lookback {
+        let b = bytes[len - i];
+        // Byte de inicio de 2 bytes: 110xxxxx
+        if (b & 0xE0) == 0xC0 {
+            if i < 2 {
+                return len - i;
+            }
+            break;
+        // Byte de inicio de 3 bytes: 1110xxxx
+        } else if (b & 0xF0) == 0xE0 {
+            if i < 3 {
+                return len - i;
+            }
+            break;
+        // Byte de inicio de 4 bytes: 11110xxx
+        } else if (b & 0xF8) == 0xF0 {
+            if i < 4 {
+                return len - i;
+            }
+            break;
+        // Si encontramos un byte ASCII puro (0xxxxxxx), no hay secuencia multibyte incompleta
+        } else if (b & 0x80) == 0 {
+            break;
+        }
+    }
+    len
+}
+
 #[derive(Clone, Default)]
 pub struct PtyManager {
     sessions: Arc<Mutex<HashMap<String, PtySession>>>,
@@ -149,8 +184,14 @@ impl PtyManager {
                     accumulated.extend_from_slice(&chunk);
                 }
 
-                // Entrega íntegra sin recorte destructivo para preservar secuencias de cursor ANSI
-                let data_to_send = std::mem::take(&mut accumulated);
+                // Preservar bytes de caracteres UTF-8 incompletos para el siguiente lote
+                let split_idx = find_incomplete_utf8_split(&accumulated);
+                if split_idx == 0 {
+                    continue;
+                }
+
+                let data_to_send = accumulated[..split_idx].to_vec();
+                accumulated = accumulated[split_idx..].to_vec();
 
                 let text = String::from_utf8_lossy(&data_to_send).to_string();
                 let event_name = format!("pty-output-{}", emit_session_id);

@@ -73,21 +73,27 @@ export function updateTerminalAccentTheme(terminal: Terminal, hex: string) {
  */
 export function stripAnsi(text: string): string {
   return text
-    // Secuencias CSI y de color completas (incluyendo 24-bit truecolor y modos extendidos)
+    // Secuencias CSI completas (colores, cursor, modos)
+    .replace(/\x1b\[[0-9;?]*[a-zA-Z~]/g, "")
+    // Secuencias CSI y de color en formato unicode
     .replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~]/g, "")
     // Secuencias OSC (títulos, notificaciones)
     .replace(/\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)/g, "")
     // Secuencias de control generales ESC + caracter
     .replace(/\x1B[@-Z\\-_]/g, "")
-    // Limpieza de secuencias huérfanas o incompletas de chunks truncados (ej. "5;221;255m")
-    .replace(/[0-9]+;[0-9;]+m/g, "")
+    // Limpieza agresiva de secuencias huérfanas o fragmentos residuales de cortes (ej. "5;221;255m", "38;2;...m")
+    .replace(/(?:^|\s|[^\w])([0-9]{1,3}(?:;[0-9]{1,3})*m)/g, " ")
     .replace(/^[0-9;]+m/g, "")
+    .replace(/[0-9;]+m/g, "")
+    // Limpieza de caracteres de reemplazo Unicode corruptos
+    .replace(/\uFFFD/g, "")
     .replace(/[\r\n]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 const lastDimensionsMap = new Map<string, { cols: number; rows: number }>();
+const ptyResizeTimers = new Map<string, number>();
 
 /**
  * Registra dimensiones iniciales para evitar un primer resize redundante
@@ -99,13 +105,14 @@ export function setInitialDimensions(sessionId: string, cols: number, rows: numb
 }
 
 /**
- * Synchronously and safely fits xterm dimensions and propagates to PTY
+ * Sincroniza y dimensiona xterm de forma segura con debounce estricto para proteger ConPTY
  */
 export function fitSafely(
   terminal: Terminal,
   fitAddon: FitAddon,
   sessionId: string,
-  isUserScrolledUp: boolean = false
+  isUserScrolledUp: boolean = false,
+  immediate: boolean = false
 ) {
   if (!sessionId) return;
   const element = terminal.element;
@@ -127,7 +134,25 @@ export function fitSafely(
       const last = lastDimensionsMap.get(sessionId);
       if (!last || last.cols !== cols || last.rows !== rows) {
         lastDimensionsMap.set(sessionId, { cols, rows });
-        invoke("resize_pty", { sessionId, cols, rows }).catch(() => {});
+
+        const sendResize = () => {
+          ptyResizeTimers.delete(sessionId);
+          invoke("resize_pty", { sessionId, cols, rows }).catch(() => {});
+        };
+
+        const existingTimer = ptyResizeTimers.get(sessionId);
+        if (existingTimer !== undefined) {
+          window.clearTimeout(existingTimer);
+          ptyResizeTimers.delete(sessionId);
+        }
+
+        if (immediate) {
+          sendResize();
+        } else {
+          // Debounce de 120ms para impedir reflow continuo y destructivo en Windows ConPTY
+          const timerId = window.setTimeout(sendResize, 120);
+          ptyResizeTimers.set(sessionId, timerId);
+        }
       }
     }
 
@@ -221,10 +246,6 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
     isUserScrolledUp = false;
     fitSafely(terminal, fitAddon, currentSessionId, false);
     terminal.scrollToBottom();
-    const vp = terminal.element?.querySelector(".xterm-viewport") as HTMLElement;
-    if (vp) {
-      vp.scrollTop = vp.scrollHeight;
-    }
     scrollBottomBtn.classList.add("hidden");
     terminal.focus();
   });
@@ -419,6 +440,11 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
       console.debug("Note: Could not force xterm bracketedPasteMode:", e);
     }
 
+    // Enfoque garantizado en mousedown sobre cualquier parte del contenedor
+    container.addEventListener("mousedown", () => {
+      terminal.focus();
+    });
+
     // Clic derecho estilo Windows Terminal:
     // Si hay selección -> copiar y limpiar selección
     // Si no hay selección -> pegar inteligentemente con Bracketed Paste
@@ -510,6 +536,11 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
     scrollBottomBtn.remove();
     if (currentSessionId) {
       lastDimensionsMap.delete(currentSessionId);
+      const timer = ptyResizeTimers.get(currentSessionId);
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+        ptyResizeTimers.delete(currentSessionId);
+      }
     }
     if (targetContainer) {
       if (contextMenuHandler) {

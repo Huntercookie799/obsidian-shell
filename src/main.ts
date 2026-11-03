@@ -665,13 +665,14 @@ class VayliIslandApp {
         }
         this.autoCollapseTimer = window.setTimeout(() => {
           if (this.currentMode === "expanded") {
-            // No auto-colapsar si el usuario está enfocado y trabajando activamente con el teclado en la terminal
+            // No auto-colapsar si la ventana tiene el foco del usuario o la terminal está activa
+            const isWindowFocused = document.hasFocus();
             const isTerminalFocused = Boolean(
               document.activeElement &&
               (document.activeElement.classList.contains("xterm-helper-textarea") ||
                document.activeElement.closest(".terminal-pane"))
             );
-            if (!isTerminalFocused) {
+            if (!isWindowFocused && !isTerminalFocused) {
               this.setMode("collapsed");
             }
           }
@@ -1088,7 +1089,7 @@ class VayliIslandApp {
 
     // 8. Global Keyboard Shortcuts
     window.addEventListener("keydown", (e) => {
-      // Escape collapses expanded island (or closes search bar / popovers)
+      // Escape closes search bar or popovers, or dismisses glance notifications
       if (e.key === "Escape") {
         if (!this.searchBar.classList.contains("hidden")) {
           e.preventDefault();
@@ -1098,30 +1099,29 @@ class VayliIslandApp {
         if (!this.settingsPopover.classList.contains("hidden")) {
           e.preventDefault();
           this.settingsPopover.classList.add("hidden");
+          const activePane = this.getActivePane();
+          if (activePane) activePane.terminal.focus();
           return;
         }
         if (!this.shellMenuPopover.classList.contains("hidden")) {
           e.preventDefault();
           this.shellMenuPopover.classList.add("hidden");
+          const activePane = this.getActivePane();
+          if (activePane) activePane.terminal.focus();
           return;
         }
 
-        // Si el usuario está enfocado dentro de la terminal interactiva, permitir que Escape
-        // pase íntegro al proceso PTY (para Antigravity CLI, Vim, Nano, Claude Code, etc.)
-        const isTerminalFocused = Boolean(
-          document.activeElement &&
-          (document.activeElement.classList.contains("xterm-helper-textarea") ||
-           document.activeElement.closest(".terminal-pane"))
-        );
-
-        if (!isTerminalFocused && this.currentMode !== "collapsed") {
+        // Si la isla está en Glance (notificación o vista rápida), Escape la colapsa a la píldora
+        if (this.currentMode === "glance") {
           e.preventDefault();
-          this.shellMenuPopover.classList.add("hidden");
-          this.settingsPopover.classList.add("hidden");
           this.dismissCliNotification(true);
           this.setMode("collapsed");
           return;
         }
+
+        // En modo expandido, NO secuestrar Escape: pertenece a herramientas CLI interactivas
+        // (Antigravity CLI "esc to dismiss", Claude Code, Vim, Nano, FZF, etc.).
+        // Para colapsar la isla, el usuario dispone del atajo global nativo Alt+Space o el botón –.
       }
 
       // Ctrl+Shift+F: Toggle Search in Buffer
@@ -1371,14 +1371,16 @@ class VayliIslandApp {
       }
 
       // Sincronización PTY definitiva y auto-anclaje al final del buffer
-      this.fitActiveTabPanes(true);
+      this.fitActiveTabPanes(false);
       if (this.activeTabId) {
         const activeTab = this.tabs.get(this.activeTabId);
         if (activeTab) {
           activeTab.panes.forEach((pane) => {
-            pane.terminal.scrollToBottom();
-            const vp = pane.element.querySelector(".xterm-viewport") as HTMLElement;
-            if (vp) vp.scrollTop = vp.scrollHeight;
+            if (pane.resetScrollToBottom) {
+              pane.resetScrollToBottom();
+            } else {
+              pane.terminal.scrollToBottom();
+            }
           });
         }
       }
@@ -1714,12 +1716,12 @@ class VayliIslandApp {
     const tab = this.tabs.get(this.activeTabId);
     if (!tab) return;
 
-    const executeFit = () => {
+    const executeFit = (immediate: boolean = false) => {
       tab.panes.forEach((pane) => {
         if (resetScrollToBottom && pane.resetScrollToBottom) {
           pane.resetScrollToBottom();
         }
-        fitSafely(pane.terminal, pane.fitAddon, pane.sessionId, pane.isUserScrolledUp());
+        fitSafely(pane.terminal, pane.fitAddon, pane.sessionId, pane.isUserScrolledUp(), immediate);
         if (resetScrollToBottom && pane.resetScrollToBottom) {
           pane.resetScrollToBottom();
         }
@@ -1728,12 +1730,12 @@ class VayliIslandApp {
       if (active) active.terminal.focus();
     };
 
-    requestAnimationFrame(executeFit);
+    requestAnimationFrame(() => executeFit(false));
 
-    // Ejecución diferida post-transición (60ms y 240ms al concluir transición CSS) para sincronizar SIGWINCH con Zsh y Fish
+    // Si hay una transición en curso, esperar a que termine (260ms) para emitir el resize definitivo
+    // sin bombardear a ConPTY con tamaños intermedios a mitad de camino
     if (withTransitionSequence) {
-      window.setTimeout(executeFit, 60);
-      window.setTimeout(executeFit, 240);
+      window.setTimeout(() => executeFit(true), 260);
     }
   }
 
