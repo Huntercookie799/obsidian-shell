@@ -4,6 +4,7 @@ import { isEnabled as isAutostartEnabled, enable as enableAutostart, disable as 
 import { createTerminalInstance, fitSafely, hexToRgb, setInitialDimensions, stripAnsi, updateTerminalAccentTheme } from "./components/TerminalView";
 import { CollapsedWidgetType, CustomProfile, IslandMode, MonitorInfo, ObsidianSettings, PtyStatus, SessionSnapshot, SnapshotPane, SnapshotTab, SystemMetrics, TerminalPane, TerminalTab } from "./types";
 import { updateManager } from "./updater/UpdateManager";
+import { CliActivityTracker, CliNotificationEvent, playNotificationSound } from "./utils/cliNotifications";
 
 class VayliIslandApp {
   private currentMode: IslandMode = "collapsed";
@@ -24,6 +25,9 @@ class VayliIslandApp {
   private isSavingSnapshot = false;
   private lastCycleTabTimestamp = 0;
   private activityTimers: Map<string, number> = new Map();
+  private cliTrackers: Map<string, CliActivityTracker> = new Map();
+  private activeCliNotification: CliNotificationEvent | null = null;
+  private notificationDismissTimer: number | null = null;
 
   // Settings & Custom Profiles persisted in localStorage
   private settings: ObsidianSettings = {
@@ -33,6 +37,8 @@ class VayliIslandApp {
     collapsedWidget: "pty_status",
     clock24h: true,
     accentColor: "#FF6B00",
+    cliNotifications: true,
+    notificationSound: true,
   };
   private customProfiles: CustomProfile[] = [];
 
@@ -48,6 +54,9 @@ class VayliIslandApp {
   private glanceTitle!: HTMLElement;
   private glanceStatusTag!: HTMLElement;
   private glanceSnippet!: HTMLElement;
+  private glanceActions!: HTMLElement;
+  private btnGlanceConfirm!: HTMLButtonElement;
+  private btnGlanceOpen!: HTMLButtonElement;
   private tabsListEl!: HTMLElement;
   private viewportEl!: HTMLElement;
   private btnAddTab!: HTMLButtonElement;
@@ -77,6 +86,8 @@ class VayliIslandApp {
   private selectCollapsedWidget!: HTMLSelectElement;
   private settingClockRow!: HTMLElement;
   private toggleClock24h!: HTMLInputElement;
+  private toggleCliNotifications!: HTMLInputElement;
+  private toggleNotificationSound!: HTMLInputElement;
 
   // Collapsed Pill Widgets DOM
   private widgetPty!: HTMLElement;
@@ -140,6 +151,9 @@ class VayliIslandApp {
     this.glanceTitle = document.getElementById("glance-title")!;
     this.glanceStatusTag = document.getElementById("glance-status-tag")!;
     this.glanceSnippet = document.getElementById("glance-snippet")!;
+    this.glanceActions = document.getElementById("glance-actions")!;
+    this.btnGlanceConfirm = document.getElementById("btn-glance-confirm") as HTMLButtonElement;
+    this.btnGlanceOpen = document.getElementById("btn-glance-open") as HTMLButtonElement;
 
     this.tabsListEl = document.getElementById("tabs-list")!;
     this.viewportEl = document.getElementById("terminal-viewport")!;
@@ -170,6 +184,8 @@ class VayliIslandApp {
     this.selectCollapsedWidget = document.getElementById("select-collapsed-widget") as HTMLSelectElement;
     this.settingClockRow = document.getElementById("setting-clock-row")!;
     this.toggleClock24h = document.getElementById("toggle-clock-24h") as HTMLInputElement;
+    this.toggleCliNotifications = document.getElementById("toggle-cli-notifications") as HTMLInputElement;
+    this.toggleNotificationSound = document.getElementById("toggle-notification-sound") as HTMLInputElement;
 
     // Collapsed Pill Widgets
     this.widgetPty = document.getElementById("widget-pty")!;
@@ -222,6 +238,12 @@ class VayliIslandApp {
     }
     if (this.toggleClock24h) {
       this.toggleClock24h.checked = this.settings.clock24h;
+    }
+    if (this.toggleCliNotifications) {
+      this.toggleCliNotifications.checked = this.settings.cliNotifications !== false;
+    }
+    if (this.toggleNotificationSound) {
+      this.toggleNotificationSound.checked = this.settings.notificationSound !== false;
     }
 
     try {
@@ -525,6 +547,10 @@ class VayliIslandApp {
         clearTimeout(this.autoCollapseTimer);
         this.autoCollapseTimer = null;
       }
+      if (this.notificationDismissTimer) {
+        clearTimeout(this.notificationDismissTimer);
+        this.notificationDismissTimer = null;
+      }
     });
 
     this.islandContainer.addEventListener("mouseleave", () => {
@@ -533,9 +559,12 @@ class VayliIslandApp {
         this.hoverTimer = null;
       }
       if (this.currentMode === "glance") {
+        if (this.activeCliNotification && this.activeCliNotification.type === "eleccion") {
+          return;
+        }
         this.leaveTimer = window.setTimeout(() => {
           if (this.currentMode === "glance") {
-            this.setMode("collapsed");
+            this.dismissCliNotification(true);
           }
         }, 200);
       } else if (this.currentMode === "expanded" && this.settings.autoCollapseOnLeave) {
@@ -760,6 +789,47 @@ class VayliIslandApp {
           } catch (err) {
             console.error("Error al cambiar pantalla activa:", err);
           }
+        }
+      });
+    }
+
+    if (this.toggleCliNotifications) {
+      this.toggleCliNotifications.addEventListener("change", () => {
+        this.settings.cliNotifications = this.toggleCliNotifications.checked;
+        this.saveSettings();
+      });
+    }
+
+    if (this.toggleNotificationSound) {
+      this.toggleNotificationSound.addEventListener("change", () => {
+        this.settings.notificationSound = this.toggleNotificationSound.checked;
+        this.saveSettings();
+      });
+    }
+
+    if (this.btnGlanceConfirm) {
+      this.btnGlanceConfirm.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (this.activeCliNotification) {
+          const sid = this.activeCliNotification.sessionId;
+          invoke("write_to_pty", { sessionId: sid, data: "\r" }).catch((err) => {
+            console.error("Error al enviar Enter al PTY:", err);
+          });
+          const tracker = this.cliTrackers.get(sid);
+          if (tracker) tracker.onUserInput();
+          this.dismissCliNotification(true);
+        }
+      });
+    }
+
+    if (this.btnGlanceOpen) {
+      this.btnGlanceOpen.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (this.activeCliNotification) {
+          const targetTabId = this.activeCliNotification.tabId;
+          this.dismissCliNotification(false);
+          this.switchTab(targetTabId);
+          this.setMode("expanded");
         }
       });
     }
@@ -1138,9 +1208,35 @@ class VayliIslandApp {
     tab.panes.push(pane);
     this.setActivePaneInTab(tab, paneId);
 
+    // Inicializar rastreador inteligente de eventos y prompts de agentes CLI
+    const cliTracker = new CliActivityTracker(sessionId, tab.id, paneId, shellDisplay);
+    this.cliTrackers.set(sessionId, cliTracker);
+
+    // Capturar alertas nativas de Bell y secuencias OSC en Xterm.js
+    pane.terminal.onBell(() => {
+      cliTracker.handleBell((notif) => this.handleCliNotification(notif));
+    });
+
+    pane.terminal.parser.registerOscHandler(9, (data) => {
+      cliTracker.handleOsc(9, data, (notif) => this.handleCliNotification(notif));
+      return true;
+    });
+
+    pane.terminal.parser.registerOscHandler(777, (data) => {
+      cliTracker.handleOsc(777, data, (notif) => this.handleCliNotification(notif));
+      return true;
+    });
+
+    pane.terminal.onData(() => {
+      cliTracker.onUserInput();
+    });
+
     // Setup PTY Streaming & Status Listeners
     const outputUnlisten = await listen<string>(`pty-output-${sessionId}`, (event) => {
       pane.writeBatched(event.payload);
+
+      // Alimentar detector heurístico de agentes CLI
+      cliTracker.feedData(event.payload, (notif) => this.handleCliNotification(notif));
 
       // Si la isla está en estado Expanded, omite por completo la limpieza y actualización del DOM de Glance
       if (this.currentMode !== "expanded") {
@@ -1254,6 +1350,10 @@ class VayliIslandApp {
 
     this.activeTabId = tabId;
 
+    if (this.activeCliNotification && this.activeCliNotification.tabId === tabId) {
+      this.dismissCliNotification(false);
+    }
+
     this.tabs.forEach((t) => {
       if (t.id === tabId) {
         t.containerElement.classList.add("active");
@@ -1328,6 +1428,15 @@ class VayliIslandApp {
     try {
       invoke("kill_pty_session", { sessionId: pane.sessionId }).catch(() => {});
     } catch {}
+
+    const cliTracker = this.cliTrackers.get(pane.sessionId);
+    if (cliTracker) {
+      cliTracker.dispose();
+      this.cliTrackers.delete(pane.sessionId);
+    }
+    if (this.activeCliNotification && this.activeCliNotification.sessionId === pane.sessionId) {
+      this.dismissCliNotification(false);
+    }
 
     pane.terminal.dispose();
     pane.element.remove();
@@ -1536,12 +1645,14 @@ class VayliIslandApp {
   private updatePaneStatus(tab: TerminalTab, pane: TerminalPane, status: "idle" | "running" | "done" | "error") {
     pane.status = status;
     if (this.activeTabId === tab.id && tab.activePaneId === pane.id) {
-      this.updateRimLight(status);
+      if (!this.activeCliNotification) {
+        this.updateRimLight(status);
+      }
       this.updatePillSummary();
     }
 
     const dot = document.querySelector(`.tab-item[data-tab-id="${tab.id}"] .tab-status-dot`);
-    if (dot) {
+    if (dot && (!this.activeCliNotification || this.activeCliNotification.tabId !== tab.id)) {
       dot.className = `tab-status-dot ${status}`;
     }
   }
@@ -1562,12 +1673,19 @@ class VayliIslandApp {
       const activeTab = this.tabs.get(this.activeTabId!);
       this.currentProcessEl.textContent = activePane.processName;
       if (this.currentMode !== "expanded") {
-        this.glanceTitle.textContent = activeTab?.title || activePane.processName;
-        this.glanceSnippet.textContent = activePane.lastSnippet || "Lista";
-        this.glanceStatusTag.textContent = activePane.status.toUpperCase();
-        this.glanceStatusTag.className = `glance-status-tag ${activePane.status}`;
+        if (!this.activeCliNotification) {
+          this.glanceTitle.textContent = activeTab?.title || activePane.processName;
+          this.glanceSnippet.textContent = activePane.lastSnippet || "Lista";
+          this.glanceStatusTag.textContent = activePane.status.toUpperCase();
+          this.glanceStatusTag.className = `glance-status-tag ${activePane.status}`;
+          if (this.glanceActions) {
+            this.glanceActions.classList.add("hidden");
+          }
+        }
       }
-      this.updateRimLight(activePane.status);
+      if (!this.activeCliNotification) {
+        this.updateRimLight(activePane.status);
+      }
 
       // Update Live Log widget in pill mode
       if (this.pillLogProcEl && this.pillLogSnippetEl) {
@@ -1575,6 +1693,95 @@ class VayliIslandApp {
         this.pillLogProcEl.textContent = `${shortProc}:`;
         this.pillLogSnippetEl.textContent = activePane.lastSnippet || "Lista";
       }
+    }
+  }
+
+  private handleCliNotification(notif: CliNotificationEvent) {
+    if (this.settings.cliNotifications === false) return;
+
+    if (this.settings.notificationSound !== false) {
+      playNotificationSound(notif.type);
+    }
+
+    // Rim light reactivo según tipo de notificación
+    const rimClass = notif.type === "eleccion" ? "rim-warning" : "rim-success";
+    this.rimLight.className = `rim-light ${rimClass}`;
+    this.statusOrb.className = `status-orb ${notif.type === "eleccion" ? "running" : "done"}`;
+    this.glanceOrb.className = `status-orb ${notif.type === "eleccion" ? "running" : "done"}`;
+
+    this.activeCliNotification = notif;
+    if (this.notificationDismissTimer) {
+      clearTimeout(this.notificationDismissTimer);
+      this.notificationDismissTimer = null;
+    }
+
+    // Actualizar contenido de Glance
+    const tab = this.tabs.get(notif.tabId);
+    const tabName = tab?.title || notif.title;
+    this.glanceTitle.textContent = `${tabName}: ${notif.title}`;
+    this.glanceSnippet.textContent = notif.promptSnippet || (notif.type === "eleccion" ? "Confirmación requerida" : "Listo");
+    this.glanceStatusTag.textContent = notif.type === "eleccion" ? "CONFIRMACIÓN" : "FINALIZADO";
+    this.glanceStatusTag.className = `glance-status-tag ${notif.type === "eleccion" ? "warning" : "success"}`;
+
+    if (this.glanceActions) {
+      this.glanceActions.classList.remove("hidden");
+      if (this.btnGlanceConfirm) {
+        if (notif.type === "eleccion") {
+          this.btnGlanceConfirm.classList.remove("hidden");
+        } else {
+          this.btnGlanceConfirm.classList.add("hidden");
+        }
+      }
+      if (this.btnGlanceOpen) {
+        this.btnGlanceOpen.textContent = notif.type === "eleccion" ? "↗ Abrir" : "↗ Ver resultado";
+      }
+    }
+
+    if (this.currentMode === "collapsed") {
+      // Auto-Glance interactivo
+      this.setMode("glance");
+
+      // Si es de tipo finalizado, auto-colapsar tras 5 segundos de inactividad
+      if (notif.type === "finalizado") {
+        this.notificationDismissTimer = window.setTimeout(() => {
+          if (this.currentMode === "glance" && this.activeCliNotification === notif) {
+            this.dismissCliNotification(true);
+          }
+        }, 5000);
+      }
+    } else if (this.currentMode === "expanded") {
+      // Si la isla está expandida pero el evento ocurre en otra pestaña, marcar el badge con animación pulsante
+      if (notif.tabId !== this.activeTabId) {
+        const dot = document.querySelector(`.tab-item[data-tab-id="${notif.tabId}"] .tab-status-dot`);
+        if (dot) {
+          dot.className = `tab-status-dot ${notif.type === "eleccion" ? "warning" : "success"}`;
+        }
+      }
+    }
+  }
+
+  private dismissCliNotification(collapseToPill = false) {
+    if (this.notificationDismissTimer) {
+      clearTimeout(this.notificationDismissTimer);
+      this.notificationDismissTimer = null;
+    }
+    this.activeCliNotification = null;
+
+    if (this.glanceActions) {
+      this.glanceActions.classList.add("hidden");
+    }
+
+    const activePane = this.getActivePane();
+    if (activePane) {
+      this.updateRimLight(activePane.status);
+    } else {
+      this.updateRimLight("idle");
+    }
+
+    if (collapseToPill && this.currentMode === "glance") {
+      this.setMode("collapsed");
+    } else {
+      this.updatePillSummary();
     }
   }
 

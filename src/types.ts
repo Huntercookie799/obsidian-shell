@@ -25,6 +25,8 @@ export interface ObsidianSettings {
   clock24h: boolean;
   accentColor: string;
   targetMonitorIndex?: number;
+  cliNotifications?: boolean;
+  notificationSound?: boolean;
 }
 
 export interface SystemMetrics {

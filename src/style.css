@@ -118,6 +118,36 @@ html, body {
   box-shadow: 0 0 12px rgba(239, 68, 68, 0.45);
 }
 
+.rim-light.rim-warning {
+  border-color: #F59E0B;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.6);
+  animation: pulse-glow-warning 1.2s infinite ease-in-out;
+}
+
+.rim-light.rim-success {
+  border-color: #10B981;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.6);
+  animation: pulse-glow-success 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse-glow-warning {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(245, 158, 11, 0.8);
+  }
+}
+
+@keyframes pulse-glow-success {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.8);
+  }
+}
+
 @keyframes pulse-glow {
   0%, 100% {
     box-shadow: 0 0 6px var(--vayli-accent-glow);
@@ -274,6 +304,80 @@ html, body {
   color: var(--vayli-status-error);
 }
 
+.glance-status-tag.warning {
+  background: rgba(245, 158, 11, 0.2);
+  color: #F59E0B;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.glance-status-tag.success {
+  background: rgba(16, 185, 129, 0.2);
+  color: var(--vayli-status-success);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.glance-top-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.glance-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.glance-actions.hidden,
+.glance-btn.hidden {
+  display: none !important;
+}
+
+.glance-btn {
+  background: #181820;
+  border: 1px solid #30303E;
+  color: #F4F4F6;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 140ms ease;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.glance-btn:hover {
+  background: #252532;
+  border-color: #454558;
+}
+
+.glance-btn-confirm {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: rgba(245, 158, 11, 0.5);
+  color: #FDE68A;
+}
+
+.glance-btn-confirm:hover {
+  background: rgba(245, 158, 11, 0.35);
+  border-color: #F59E0B;
+}
+
+.glance-btn-open {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #FFFFFF;
+}
+
+.glance-btn-open:hover {
+  background: var(--vayli-accent-primary);
+  border-color: var(--vayli-accent-hover);
+  color: #FFFFFF;
+}
+
 .glance-bottom {
   display: flex;
   align-items: center;
@@ -381,6 +485,28 @@ html, body {
 
 .tab-status-dot.error {
   background: var(--vayli-status-error);
+}
+
+.tab-status-dot.warning {
+  background: #F59E0B;
+  box-shadow: 0 0 8px #F59E0B;
+  animation: pulse-dot-warning 1s infinite ease-in-out;
+}
+
+.tab-status-dot.success {
+  background: #10B981;
+  box-shadow: 0 0 8px #10B981;
+}
+
+@keyframes pulse-dot-warning {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.4);
+    opacity: 1;
+  }
 }
 
 .tab-close-btn {

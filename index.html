@@ -53,10 +53,16 @@
             <span class="status-orb" id="glance-orb"></span>
             <span class="glance-title" id="glance-title">1: powershell</span>
           </div>
-          <span class="glance-status-tag" id="glance-status-tag">EN ESPERA</span>
+          <div class="glance-top-right">
+            <span class="glance-status-tag" id="glance-status-tag">EN ESPERA</span>
+            <div class="glance-actions hidden" id="glance-actions">
+              <button class="glance-btn glance-btn-confirm" id="btn-glance-confirm" title="Enviar Enter al agente">✓ Aceptar</button>
+              <button class="glance-btn glance-btn-open" id="btn-glance-open" title="Abrir y enfocar pestaña">↗ Abrir</button>
+            </div>
+          </div>
         </div>
         <div class="glance-bottom">
-          <span class="glance-prompt-icon">&gt;</span>
+          <span class="glance-prompt-icon" id="glance-prompt-icon">&gt;</span>
           <span class="glance-snippet" id="glance-snippet">Terminal lista</span>
         </div>
       </section>
@@ -249,6 +255,28 @@
             <select id="select-active-monitor" class="setting-select">
               <option value="0">Cargando pantallas...</option>
             </select>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-text">
+              <span class="setting-title">Notificaciones de agentes CLI</span>
+              <span class="setting-subtitle">Detecta preguntas y tareas completadas</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-cli-notifications" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-text">
+              <span class="setting-title">Sonido suave de notificación</span>
+              <span class="setting-subtitle">Tono sutil al terminar o requerir confirmación</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-notification-sound" checked />
+              <span class="toggle-slider"></span>
+            </label>
           </div>
 
           <div class="setting-item column" id="setting-accent-section">
