@@ -211,8 +211,9 @@ pub fn update_island_geometry_on_monitor(
         .set_position(PhysicalPosition::new(phys_x, phys_y))
         .map_err(|e| format!("Failed to set window position: {}", e))?;
 
-    // Lock manual edge-dragging by user
+    // Lock manual edge-dragging by user and prevent rectangular DWM window shadow
     let _ = window.set_resizable(false);
+    let _ = window.set_shadow(false);
 
     Ok(())
 }

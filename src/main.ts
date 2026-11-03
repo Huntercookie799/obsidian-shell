@@ -142,6 +142,10 @@ class VayliIslandApp {
   }
 
   private cacheDom() {
+    // Forzar transparencia estricta en la raíz del documento
+    document.documentElement.style.backgroundColor = "transparent";
+    document.body.style.backgroundColor = "transparent";
+
     this.islandContainer = document.getElementById("island-container")!;
     this.rimLight = document.getElementById("rim-light")!;
     this.notchPill = document.getElementById("notch-pill")!;

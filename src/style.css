@@ -29,7 +29,7 @@
 html, body {
   width: 100%;
   height: 100%;
-  background: transparent;
+  background: transparent !important;
   overflow: hidden;
   font-family: var(--font-sans);
   color: var(--vayli-text-primary);
@@ -44,9 +44,10 @@ html, body {
   width: 260px;
   height: 34px;
   background: var(--vayli-bg-pill);
-  border-radius: 17px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.8), 0 0 0 1px var(--vayli-border-idle);
+  border-radius: 9999px;
   overflow: hidden;
+  contain: paint;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.8), 0 0 0 1px var(--vayli-border-idle);
   display: flex;
   flex-direction: column;
   transition: width 260ms var(--ease-spring),
@@ -61,7 +62,9 @@ html, body {
 #island-container.state-collapsed {
   width: 260px;
   height: 34px;
-  border-radius: 17px;
+  border-radius: 9999px;
+  overflow: hidden;
+  contain: paint;
   background: var(--vayli-bg-pill);
 }
 
@@ -110,12 +113,16 @@ html, body {
   width: 34px;
   height: 260px;
   border-radius: 0 17px 17px 0;
+  contain: paint;
+  overflow: hidden;
 }
 
 #island-container.state-collapsed.dock-vertical-right {
   width: 34px;
   height: 260px;
   border-radius: 17px 0 0 17px;
+  contain: paint;
+  overflow: hidden;
 }
 
 /* Glance state on Left & Right Edges */
@@ -167,6 +174,16 @@ html, body {
   padding: 12px 0;
   justify-content: space-between;
   align-items: center;
+  overflow: hidden;
+  contain: paint;
+}
+
+#island-container.state-collapsed.dock-vertical-left #notch-pill {
+  border-radius: 0 17px 17px 0;
+}
+
+#island-container.state-collapsed.dock-vertical-right #notch-pill {
+  border-radius: 17px 0 0 17px;
 }
 
 #island-container.state-collapsed.dock-vertical-left .pill-left,
@@ -323,6 +340,9 @@ html, body {
   justify-content: space-between;
   cursor: pointer;
   background: inherit;
+  overflow: hidden;
+  contain: paint;
+  border-radius: 9999px;
   z-index: 10;
 }
 

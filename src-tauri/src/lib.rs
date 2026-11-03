@@ -318,7 +318,9 @@ pub fn run() {
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 // Eliminate DWM rectangular shadow on Windows 11 around transparent window
+                let _ = window.set_decorations(false);
                 let _ = window.set_shadow(false);
+                let _ = window.set_background_color(None);
                 // Initialize window at collapsed notch geometry (260x34 pinned top center)
                 let _ = update_island_geometry(&window, IslandState::Collapsed);
             }
