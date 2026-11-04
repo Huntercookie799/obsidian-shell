@@ -167,17 +167,24 @@ export function fitSafely(
       }
     }
 
-    // Refrescar el rango completo de filas renderizadas en el buffer
+    // Refrescar el rango completo de filas renderizadas en el buffer y emitir evento de redimensionamiento
     try {
       terminal.refresh(0, Math.max(0, terminal.rows - 1));
-    } catch {}
+      window.dispatchEvent(
+        new CustomEvent("resize-pty", {
+          detail: { cols: terminal.cols, rows: terminal.rows, sessionId },
+        })
+      );
+    } catch (e) {
+      console.error("Error al refrescar o emitir resize-pty:", e);
+    }
 
     // Sincronización estricta de anclaje al fondo para que no quede nada oculto
     if (!isUserScrolledUp) {
       terminal.scrollToBottom();
     }
   } catch (err) {
-    console.debug("[Anti-Flicker] Safe fit deferred:", err);
+    console.error("Error al ajustar el viewport de la terminal:", err);
   }
 }
 
@@ -209,7 +216,7 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
     theme: dynamicTheme,
     fontFamily: "'JetBrainsMono Nerd Font', 'FiraCode Nerd Font', 'MesloLGS NF', 'Cascadia Code NF', 'Cascadia Mono', 'JetBrains Mono', 'Fira Code', 'DejaVu Sans Mono', 'Ubuntu Mono', monospace",
     fontSize: 13,
-    lineHeight: 1.25,
+    lineHeight: 1.2,
     letterSpacing: 0,
     cursorBlink: true,
     cursorStyle: "bar",

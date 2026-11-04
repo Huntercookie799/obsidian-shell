@@ -989,7 +989,7 @@ html, body {
   line-height: 1;
 }
 
-/* Xterm Overrides & Absolute Transparency Hierarchy (Fase 30.1) */
+/* Xterm Overrides & Absolute Transparency Hierarchy (Fase 30.1 & Fase 30.2) */
 .terminal-pane .xterm,
 .terminal-instance .xterm,
 .xterm,
@@ -1001,6 +1001,23 @@ html, body {
 .xterm-selection-layer {
   background: transparent !important;
   background-color: transparent !important;
+}
+
+.terminal-pane .xterm-accessibility,
+.terminal-pane .xterm-screen {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.terminal-pane .xterm-rows {
+  line-height: 1.2 !important;
+}
+
+.terminal-pane .xterm,
+.terminal-pane .xterm-viewport,
+.terminal-pane .xterm-screen,
+.terminal-pane .xterm-text-layer {
+  background: transparent !important;
 }
 
 .terminal-pane .xterm,
