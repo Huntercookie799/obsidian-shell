@@ -79,6 +79,8 @@ class VayliIslandApp {
   private metricsTimer: number | null = null;
   private autoSaveTimer: number | null = null;
   private fullscreenCheckTimer: number | null = null;
+  private idleTimer: number | null = null;
+  private isIdleHidden = false;
   private isSavingSnapshot = false;
   private lastCycleTabTimestamp = 0;
   private activityTimers: Map<string, number> = new Map();
@@ -100,6 +102,8 @@ class VayliIslandApp {
     terminalOpacity: 1.0,
     terminalBlur: 0,
     terminalWallpaper: undefined,
+    autoHideEnabled: false,
+    autoHideMinutes: 3,
   };
   private customProfiles: CustomProfile[] = [];
 
@@ -145,6 +149,9 @@ class VayliIslandApp {
   private btnSettingsClearFolders: HTMLButtonElement | null = null;
   private settingsPopover!: HTMLElement;
   private toggleAutoCollapse!: HTMLInputElement;
+  private toggleAutoHideIdle!: HTMLInputElement;
+  private selectAutoHideIdleMins!: HTMLSelectElement;
+  private settingAutoHideIdleRow!: HTMLElement;
   private toggleAutostart!: HTMLInputElement;
   private toggleRestoreSession!: HTMLInputElement;
   private toggleShowOverFullscreen!: HTMLInputElement;
@@ -266,6 +273,9 @@ class VayliIslandApp {
     this.btnSettingsClearFolders = document.getElementById("btn-settings-clear-folders") as HTMLButtonElement | null;
     this.settingsPopover = document.getElementById("settings-popover")!;
     this.toggleAutoCollapse = document.getElementById("toggle-auto-collapse") as HTMLInputElement;
+    this.toggleAutoHideIdle = document.getElementById("toggle-auto-hide-idle") as HTMLInputElement;
+    this.selectAutoHideIdleMins = document.getElementById("select-auto-hide-idle-mins") as HTMLSelectElement;
+    this.settingAutoHideIdleRow = document.getElementById("setting-auto-hide-idle-row")!;
     this.toggleAutostart = document.getElementById("toggle-autostart") as HTMLInputElement;
     this.toggleRestoreSession = document.getElementById("toggle-restore-session") as HTMLInputElement;
     this.toggleShowOverFullscreen = document.getElementById("toggle-show-over-fullscreen") as HTMLInputElement;
@@ -322,6 +332,15 @@ class VayliIslandApp {
     }
     if (this.toggleAutoCollapse) {
       this.toggleAutoCollapse.checked = this.settings.autoCollapseOnLeave;
+    }
+    if (this.toggleAutoHideIdle) {
+      this.toggleAutoHideIdle.checked = !!this.settings.autoHideEnabled;
+    }
+    if (this.selectAutoHideIdleMins) {
+      this.selectAutoHideIdleMins.value = (this.settings.autoHideMinutes || 3).toString();
+    }
+    if (this.settingAutoHideIdleRow) {
+      this.settingAutoHideIdleRow.style.display = this.settings.autoHideEnabled ? "flex" : "none";
     }
     if (this.toggleRestoreSession) {
       this.toggleRestoreSession.checked = this.settings.restoreSessionOnStartup;
@@ -424,6 +443,8 @@ class VayliIslandApp {
     } else {
       this.clearTerminalWallpaper();
     }
+
+    this.resetIdleTimer();
   }
 
   private async refreshMonitorsList() {
@@ -940,7 +961,14 @@ class VayliIslandApp {
 
   private async listenToBackendState() {
     await listen<IslandMode>("island-state-changed", (event) => {
+      this.isIdleHidden = false;
       this.setMode(event.payload, false);
+      this.resetIdleTimer();
+    });
+
+    await listen("edge-hover-wakeup", () => {
+      this.isIdleHidden = false;
+      this.resetIdleTimer();
     });
   }
 
@@ -1206,6 +1234,35 @@ class VayliIslandApp {
       this.settings.autoCollapseOnLeave = this.toggleAutoCollapse.checked;
       this.saveSettings();
     });
+
+    if (this.toggleAutoHideIdle) {
+      this.toggleAutoHideIdle.addEventListener("change", () => {
+        this.settings.autoHideEnabled = this.toggleAutoHideIdle.checked;
+        if (this.settingAutoHideIdleRow) {
+          this.settingAutoHideIdleRow.style.display = this.settings.autoHideEnabled ? "flex" : "none";
+        }
+        this.saveSettings();
+        this.resetIdleTimer();
+        if (!this.settings.autoHideEnabled && this.isIdleHidden) {
+          this.showFromIdle();
+        }
+      });
+    }
+
+    if (this.selectAutoHideIdleMins) {
+      this.selectAutoHideIdleMins.addEventListener("change", () => {
+        this.settings.autoHideMinutes = parseInt(this.selectAutoHideIdleMins.value, 10) || 3;
+        this.saveSettings();
+        this.resetIdleTimer();
+      });
+    }
+
+    // Oyentes de actividad global para el temporizador de inactividad (Fase 31)
+    const onActivity = () => this.onUserActivity();
+    window.addEventListener("mousemove", onActivity, { passive: true });
+    window.addEventListener("mousedown", onActivity, { passive: true });
+    window.addEventListener("keydown", onActivity, { passive: true });
+    window.addEventListener("touchstart", onActivity, { passive: true });
 
     this.toggleAutostart.addEventListener("change", async () => {
       try {
@@ -1915,6 +1972,7 @@ class VayliIslandApp {
 
   public async setMode(mode: IslandMode, notifyBackend = true) {
     this.currentMode = mode;
+    this.resetIdleTimer();
 
     this.islandContainer.classList.remove("state-collapsed", "state-glance", "state-expanded");
     this.islandContainer.classList.add(`state-${mode}`);
@@ -1937,6 +1995,81 @@ class VayliIslandApp {
     if (mode === "expanded") {
       this.fitActiveTabPanes(true, true);
     }
+  }
+
+  /**
+   * Manejador de actividad del usuario para reiniciar el temporizador de inactividad (Fase 31)
+   */
+  private onUserActivity() {
+    if (this.isIdleHidden) {
+      this.showFromIdle();
+    }
+    this.resetIdleTimer();
+  }
+
+  /**
+   * Reinicia el temporizador de inactividad configurado
+   */
+  private resetIdleTimer() {
+    if (this.idleTimer !== null) {
+      window.clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
+
+    if (!this.settings.autoHideEnabled) {
+      return;
+    }
+
+    const minutes = this.settings.autoHideMinutes || 3;
+    const timeoutMs = minutes * 60 * 1000;
+
+    this.idleTimer = window.setTimeout(() => {
+      this.checkAndHideForIdle();
+    }, timeoutMs);
+  }
+
+  /**
+   * Comprueba las condiciones de inactividad y oculta la ventana si está en reposo (Fase 31)
+   */
+  private async checkAndHideForIdle() {
+    if (!this.settings.autoHideEnabled) return;
+
+    // Solo ocultar si la Dynamic Island se encuentra en estado Collapsed (en reposo)
+    if (this.currentMode !== "collapsed") {
+      this.resetIdleTimer();
+      return;
+    }
+
+    // No ocultar si algún menú o popover está abierto
+    if (
+      (this.settingsPopover && !this.settingsPopover.classList.contains("hidden")) ||
+      (this.shellMenuPopover && !this.shellMenuPopover.classList.contains("hidden")) ||
+      (this.folderMenuPopover && !this.folderMenuPopover.classList.contains("hidden")) ||
+      (this.searchBar && !this.searchBar.classList.contains("hidden"))
+    ) {
+      this.resetIdleTimer();
+      return;
+    }
+
+    this.isIdleHidden = true;
+    try {
+      await invoke("set_idle_hidden", { hidden: true });
+    } catch (err) {
+      console.debug("Error al ocultar ventana por inactividad:", err);
+    }
+  }
+
+  /**
+   * Restaura la ventana y su estado tras despertar de la inactividad (Fase 31)
+   */
+  private async showFromIdle() {
+    this.isIdleHidden = false;
+    try {
+      await invoke("set_idle_hidden", { hidden: false });
+    } catch (err) {
+      console.debug("Error al restaurar ventana desde inactividad:", err);
+    }
+    this.resetIdleTimer();
   }
 
   public async createTab(shellPath?: string, cwd?: string): Promise<string> {

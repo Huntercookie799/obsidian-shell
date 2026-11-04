@@ -237,6 +237,31 @@
             </label>
           </div>
 
+          <!-- Ocultamiento por Inactividad (Fase 31) -->
+          <div class="setting-item">
+            <div class="setting-text">
+              <span class="setting-title">Ocultar por inactividad</span>
+              <span class="setting-subtitle">Oculta la ventana tras tiempo sin interacción</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-auto-hide-idle" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-item column" id="setting-auto-hide-idle-row" style="display: none;">
+            <div class="setting-text">
+              <span class="setting-title">Tiempo de inactividad</span>
+              <span class="setting-subtitle">Minutos en reposo antes de ocultar</span>
+            </div>
+            <select id="select-auto-hide-idle-mins" class="setting-select">
+              <option value="1">1 minuto</option>
+              <option value="3" selected>3 minutos</option>
+              <option value="5">5 minutos</option>
+              <option value="10">10 minutos</option>
+            </select>
+          </div>
+
           <div class="setting-item">
             <div class="setting-text">
               <span class="setting-title">Arrancar con el sistema</span>

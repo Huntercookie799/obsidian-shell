@@ -43,6 +43,8 @@ export interface ObsidianSettings {
   terminalOpacity?: number;
   terminalBlur?: number;
   terminalWallpaper?: string;
+  autoHideEnabled?: boolean;
+  autoHideMinutes?: number;
 }
 
 export interface SystemMetrics {

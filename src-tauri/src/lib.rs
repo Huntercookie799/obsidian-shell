@@ -269,6 +269,25 @@ fn set_expanded_dimensions(
     Ok(())
 }
 
+#[tauri::command]
+fn set_idle_hidden(window: WebviewWindow, hidden: bool) -> Result<(), String> {
+    window::set_idle_hidden_state(hidden);
+    if hidden {
+        window.hide().map_err(|e| e.to_string())?;
+    } else {
+        window.show().map_err(|e| e.to_string())?;
+        let _ = window.set_always_on_top(true);
+        let _ = window::update_island_geometry(&window, window::IslandState::Collapsed);
+        let _ = window.emit("edge-hover-wakeup", ());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn is_idle_hidden() -> bool {
+    window::is_idle_hidden()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let pty_manager = PtyManager::new();
@@ -288,6 +307,7 @@ pub fn run() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, _shortcut, event| {
                     if event.state == ShortcutState::Pressed {
+                        window::set_idle_hidden_state(false);
                         let state_holder = app.state::<IslandStateHolder>();
                         let mut current = state_holder.0.lock();
                         let next = match *current {
@@ -323,6 +343,21 @@ pub fn run() {
                 let _ = window.set_shadow(false);
                 // Initialize window at collapsed notch geometry (260x34 pinned top center)
                 let _ = update_island_geometry(&window, IslandState::Collapsed);
+
+                // Hilo de sondeo ligero para Edge Hover Wakeup (Fase 31)
+                let window_clone = window.clone();
+                std::thread::spawn(move || {
+                    loop {
+                        std::thread::sleep(std::time::Duration::from_millis(80));
+                        if window::is_idle_hidden() {
+                            if let Some(cursor) = window::get_cursor_pos() {
+                                if window::is_cursor_near_dock(&window_clone, cursor) {
+                                    window::wake_up_from_idle(&window_clone);
+                                }
+                            }
+                        }
+                    }
+                });
             }
 
             // Register global shortcuts: Alt+Space and CommandOrControl+Backquote as fallback
@@ -353,6 +388,7 @@ pub fn run() {
                 .on_menu_event(move |app, event| {
                     match event.id.as_ref() {
                         "toggle" => {
+                            window::set_idle_hidden_state(false);
                             let state_holder = app.state::<IslandStateHolder>();
                             let mut current = state_holder.0.lock();
                             let next = match *current {
@@ -410,6 +446,7 @@ pub fn run() {
                 })
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                        window::set_idle_hidden_state(false);
                         let app = tray.app_handle();
                         let state_holder = app.state::<IslandStateHolder>();
                         let mut current = state_holder.0.lock();
@@ -465,7 +502,9 @@ pub fn run() {
             get_system_metrics,
             get_available_monitors,
             set_active_monitor,
-            set_expanded_dimensions
+            set_expanded_dimensions,
+            set_idle_hidden,
+            is_idle_hidden
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

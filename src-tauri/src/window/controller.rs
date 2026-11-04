@@ -5,6 +5,15 @@ use tauri::{Emitter, PhysicalPosition, PhysicalSize, WebviewWindow};
 
 static CURRENT_MONITOR_INDEX: AtomicUsize = AtomicUsize::new(0);
 pub static SHOW_OVER_FULLSCREEN: AtomicBool = AtomicBool::new(false);
+pub static IDLE_HIDDEN: AtomicBool = AtomicBool::new(false);
+
+pub fn is_idle_hidden() -> bool {
+    IDLE_HIDDEN.load(Ordering::SeqCst)
+}
+
+pub fn set_idle_hidden_state(hidden: bool) {
+    IDLE_HIDDEN.store(hidden, Ordering::SeqCst);
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -526,4 +535,99 @@ pub fn handle_fullscreen_visibility(
     }
 
     Ok(is_fullscreen)
+}
+
+#[cfg(target_os = "windows")]
+pub fn get_cursor_pos() -> Option<(i32, i32)> {
+    use windows_sys::Win32::Foundation::POINT;
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
+    let mut pt = POINT { x: 0, y: 0 };
+    let ok = unsafe { GetCursorPos(&mut pt) };
+    if ok != 0 {
+        Some((pt.x, pt.y))
+    } else {
+        None
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn get_cursor_pos() -> Option<(i32, i32)> {
+    None
+}
+
+pub fn is_cursor_near_dock(window: &WebviewWindow, (cursor_x, cursor_y): (i32, i32)) -> bool {
+    let monitors = match window.available_monitors() {
+        Ok(m) => m,
+        Err(_) => return false,
+    };
+    if monitors.is_empty() {
+        return false;
+    }
+
+    let idx = CURRENT_MONITOR_INDEX.load(Ordering::SeqCst) % monitors.len();
+    let monitor = &monitors[idx];
+    let mon_pos = monitor.position();
+    let mon_size = monitor.size();
+    let scale = monitor.scale_factor();
+    let dock_pos = get_dock_position();
+
+    let mon_x = mon_pos.x;
+    let mon_y = mon_pos.y;
+    let mon_w = mon_size.width as i32;
+    let mon_h = mon_size.height as i32;
+    let mon_max_x = mon_x + mon_w;
+    let mon_max_y = mon_y + mon_h;
+
+    // Descartar si el cursor está fuera de los límites generales del monitor activo
+    if cursor_x < mon_x - 10 || cursor_x > mon_max_x + 10 || cursor_y < mon_y - 10 || cursor_y > mon_max_y + 10 {
+        return false;
+    }
+
+    let threshold = ((15.0 * scale).round() as i32).max(15);
+    let pill_w = (260.0 * scale).round() as i32;
+    let pill_h = (260.0 * scale).round() as i32;
+
+    match dock_pos {
+        DockPosition::TopCenter => {
+            let center_x = mon_x + (mon_w / 2);
+            let in_x_range = cursor_x >= (center_x - (pill_w / 2) - 30) && cursor_x <= (center_x + (pill_w / 2) + 30);
+            let in_y_range = cursor_y >= mon_y && cursor_y <= (mon_y + threshold);
+            in_x_range && in_y_range
+        }
+        DockPosition::TopLeft => {
+            let in_x_range = cursor_x >= mon_x && cursor_x <= (mon_x + pill_w + 30);
+            let in_y_range = cursor_y >= mon_y && cursor_y <= (mon_y + threshold);
+            in_x_range && in_y_range
+        }
+        DockPosition::TopRight => {
+            let in_x_range = cursor_x >= (mon_max_x - pill_w - 30) && cursor_x <= mon_max_x;
+            let in_y_range = cursor_y >= mon_y && cursor_y <= (mon_y + threshold);
+            in_x_range && in_y_range
+        }
+        DockPosition::LeftEdge { y_ratio } => {
+            let safe_ratio = y_ratio.clamp(0.0, 1.0);
+            let available_h = mon_size.height.saturating_sub(pill_h as u32) as f32;
+            let pill_y = mon_y + (available_h * safe_ratio).round() as i32;
+            let in_x_range = cursor_x >= mon_x && cursor_x <= (mon_x + threshold);
+            let in_y_range = cursor_y >= (pill_y - 30) && cursor_y <= (pill_y + pill_h + 30);
+            in_x_range && in_y_range
+        }
+        DockPosition::RightEdge { y_ratio } => {
+            let safe_ratio = y_ratio.clamp(0.0, 1.0);
+            let available_h = mon_size.height.saturating_sub(pill_h as u32) as f32;
+            let pill_y = mon_y + (available_h * safe_ratio).round() as i32;
+            let in_x_range = cursor_x >= (mon_max_x - threshold) && cursor_x <= mon_max_x;
+            let in_y_range = cursor_y >= (pill_y - 30) && cursor_y <= (pill_y + pill_h + 30);
+            in_x_range && in_y_range
+        }
+    }
+}
+
+pub fn wake_up_from_idle(window: &WebviewWindow) {
+    set_idle_hidden_state(false);
+    let _ = window.show();
+    let _ = window.set_always_on_top(true);
+    let _ = update_island_geometry(window, IslandState::Collapsed);
+    let _ = window.emit("edge-hover-wakeup", ());
+    let _ = window.emit("island-state-changed", IslandState::Collapsed);
 }
