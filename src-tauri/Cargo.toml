@@ -1,6 +1,6 @@
 [package]
 name = "obsidian-shell"
-version = "0.8.2"
+version = "0.8.3"
 description = "ObsidianShell - Ultra-optimized dynamic notch terminal island manager"
 authors = ["ObsidianShell Team"]
 edition = "2021"
