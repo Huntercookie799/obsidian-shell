@@ -1,8 +1,43 @@
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { hexToRgb } from "../TerminalView";
 import { stateManager } from "../../core/StateManager";
 import { promptSelectWallpaperImage } from "../../utils/formatters";
+
+/**
+ * Convierte un archivo (File object o ruta) a Data URL base64
+ */
+async function fileToDataUrl(fileOrPath: File | string): Promise<string> {
+  if (typeof fileOrPath === "string") {
+    // Es una ruta: leer con Tauri FS
+    let fileUrl: string;
+    if (fileOrPath.startsWith("file://")) {
+      fileUrl = fileOrPath;
+    } else if (/^[A-Za-z]:\\/.test(fileOrPath) || /^[A-Za-z]:\//.test(fileOrPath)) {
+      fileUrl = `file:///${fileOrPath.replace(/\\/g, "/")}`;
+    } else if (fileOrPath.startsWith("/")) {
+      fileUrl = `file://${fileOrPath}`;
+    } else {
+      fileUrl = fileOrPath;
+    }
+    const binaryData = await readFile(fileUrl);
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(binaryData)));
+    const ext = fileOrPath.split(".").pop()?.toLowerCase();
+    const mimeType = ext === "jpg" || ext === "jpeg" ? "image/jpeg" :
+                     ext === "png" ? "image/png" :
+                     ext === "webp" ? "image/webp" :
+                     ext === "gif" ? "image/gif" :
+                     ext === "bmp" ? "image/bmp" : "image/png";
+    return `data:${mimeType};base64,${base64}`;
+  } else {
+    // Es un File object: usar FileReader
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(fileOrPath);
+    });
+  }
+}
 
 export interface AppearanceCallbacks {
   onAccentChange?: (hex: string) => void;
@@ -175,45 +210,21 @@ export class AppearanceManager {
     let bgUrl: string;
 
     if (clean.startsWith("data:") || clean.startsWith("blob:") || clean.startsWith("http://") || clean.startsWith("https://")) {
-      // Data URLs, blob URLs, and remote URLs can be used directly
+      // Ya es Data URL, blob URL o URL remota - usar directamente
       bgUrl = clean;
     } else {
-      // Local file path: read the file using Tauri FS plugin and convert to data URL
+      // Es una ruta de archivo local - convertir a Data URL
       try {
-        // Convert Windows path to proper file:// URL (file:///C:/path on Windows)
-        let fileUrl: string;
-        if (clean.startsWith("file://")) {
-          fileUrl = clean;
-        } else if (/^[A-Za-z]:\\/.test(clean) || /^[A-Za-z]:\//.test(clean)) {
-          // Windows absolute path like C:\path or C:/path
-          fileUrl = `file:///${clean.replace(/\\/g, "/")}`;
-        } else if (clean.startsWith("/")) {
-          // Unix absolute path
-          fileUrl = `file://${clean}`;
-        } else {
-          // Relative path - use as-is
-          fileUrl = clean;
-        }
-        const binaryData = await readFile(fileUrl);
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(binaryData)));
-        const mimeType = this.getMimeType(clean);
-        bgUrl = `data:${mimeType};base64,${base64}`;
-        console.log("[AppearanceManager] Wallpaper loaded successfully via FS plugin", { fileUrl });
+        bgUrl = await fileToDataUrl(clean);
+        console.log("[AppearanceManager] Wallpaper convertido a Data URL exitosamente");
       } catch (err) {
-        console.error("[AppearanceManager] Error al leer archivo de wallpaper con FS plugin:", err);
-        // Fallback to convertFileSrc (may work for some paths)
-        try {
-          bgUrl = convertFileSrc(clean);
-          console.log("[AppearanceManager] Fallback to convertFileSrc succeeded");
-        } catch (err2) {
-          console.error("[AppearanceManager] convertFileSrc also failed:", err2);
-          bgUrl = "";
-        }
+        console.error("[AppearanceManager] Error al convertir wallpaper a Data URL:", err);
+        bgUrl = "";
       }
     }
 
     if (!bgUrl) {
-      console.error("[AppearanceManager] No se pudo cargar el wallpaper");
+      console.error("[AppearanceManager] No se pudo cargel wallpaper");
       return;
     }
 
@@ -226,32 +237,21 @@ export class AppearanceManager {
       this.applyTerminalOpacity(0.8);
     }
 
+    // IMPORTANTE: Guardar SIEMPRE el Data URL, no la ruta original
+    // Esto funciona en debug Y en producción
     stateManager.saveSettings({
-      terminalWallpaper: clean,
+      terminalWallpaper: bgUrl,
       terminalOpacity: updatedOpacity,
     });
 
-    const name = displayName || clean.split(/[/\\]/).filter(Boolean).pop() || "Imagen activa";
+    const name = displayName || (clean.startsWith("data:") ? "Imagen personalizada" : clean.split(/[/\\]/).filter(Boolean).pop()) || "Imagen activa";
     if (this.labelWallpaperStatus) {
       this.labelWallpaperStatus.textContent = name;
       this.labelWallpaperStatus.classList.add("active");
-      this.labelWallpaperStatus.title = clean;
+      this.labelWallpaperStatus.title = name;
     }
     if (this.btnRemoveWallpaper) {
       this.btnRemoveWallpaper.classList.remove("hidden");
-    }
-  }
-
-  private getMimeType(filePath: string): string {
-    const ext = filePath.split(".").pop()?.toLowerCase();
-    switch (ext) {
-      case "png": return "image/png";
-      case "jpg":
-      case "jpeg": return "image/jpeg";
-      case "webp": return "image/webp";
-      case "gif": return "image/gif";
-      case "bmp": return "image/bmp";
-      default: return "image/png";
     }
   }
 
