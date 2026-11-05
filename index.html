@@ -117,10 +117,16 @@
               </svg>
             </button>
             <!-- Settings Button -->
-            <button class="action-btn" id="btn-settings" title="Configuración de ObsidianShell">
+            <button class="action-btn" id="btn-settings" title="Configuración (Ctrl+,)">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="3"></circle>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+            </button>
+            <!-- Maximize/Fullscreen Button -->
+            <button class="action-btn" id="btn-maximize" title="Pantalla completa (F11)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
               </svg>
             </button>
             <button class="action-btn" id="btn-add-tab" title="Nueva terminal (Ctrl+T)">
@@ -225,219 +231,7 @@
           </div>
         </div>
 
-        <!-- Settings Popover -->
-        <div id="settings-popover" class="settings-popover hidden">
-          <div class="menu-header">Ajustes de ObsidianShell</div>
-          
-          <div class="setting-item">
-            <div class="setting-text">
-              <span class="setting-title">Auto-ocultar al quitar cursor</span>
-              <span class="setting-subtitle">Repliega a píldora tras 300ms</span>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="toggle-auto-collapse" checked />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-
-          <!-- Ocultamiento por Inactividad (Fase 31) -->
-          <div class="setting-item">
-            <div class="setting-text">
-              <span class="setting-title">Ocultar por inactividad</span>
-              <span class="setting-subtitle">Oculta la ventana tras tiempo sin interacción</span>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="toggle-auto-hide-idle" />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-
-          <div class="setting-item column" id="setting-auto-hide-idle-row" style="display: none;">
-            <div class="setting-text">
-              <span class="setting-title">Tiempo de inactividad</span>
-              <span class="setting-subtitle">Minutos en reposo antes de ocultar</span>
-            </div>
-            <select id="select-auto-hide-idle-mins" class="setting-select">
-              <option value="1">1 minuto</option>
-              <option value="3" selected>3 minutos</option>
-              <option value="5">5 minutos</option>
-              <option value="10">10 minutos</option>
-            </select>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-text">
-              <span class="setting-title">Arrancar con el sistema</span>
-              <span class="setting-subtitle">Iniciar ObsidianShell al iniciar sesión</span>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="toggle-autostart" />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-text">
-              <span class="setting-title">Restaurar sesión al iniciar</span>
-              <span class="setting-subtitle">Recupera pestañas, paneles y buffer previo</span>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="toggle-restore-session" checked />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-text">
-              <span class="setting-title">Mostrar sobre pantalla completa</span>
-              <span class="setting-subtitle">Mantener visible sobre juegos y videos</span>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="toggle-show-over-fullscreen" />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-
-          <div class="setting-item column" id="setting-dock-row">
-            <div class="setting-text">
-              <span class="setting-title">Posición de la isla</span>
-              <span class="setting-subtitle">Zona de anclaje magnético en la pantalla</span>
-            </div>
-            <select id="select-dock-position" class="setting-select">
-              <option value="TopCenter">Centro Superior (Por defecto)</option>
-              <option value="TopLeft">Esquina Superior Izquierda</option>
-              <option value="TopRight">Esquina Superior Derecha</option>
-              <option value="LeftEdge">Lateral Izquierdo (Vertical)</option>
-              <option value="RightEdge">Lateral Derecho (Vertical)</option>
-            </select>
-          </div>
-
-          <div class="setting-item column" id="setting-monitor-row">
-            <div class="setting-text">
-              <span class="setting-title">Pantalla del Notch</span>
-              <span class="setting-subtitle">Selecciona el monitor donde se mantendrá la Dynamic Island</span>
-            </div>
-            <select id="select-active-monitor" class="setting-select">
-              <option value="0">Cargando pantallas...</option>
-            </select>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-text">
-              <span class="setting-title">Notificaciones de agentes CLI</span>
-              <span class="setting-subtitle">Detecta preguntas y tareas completadas</span>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="toggle-cli-notifications" checked />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-
-          <div class="setting-item">
-            <div class="setting-text">
-              <span class="setting-title">Sonido suave de notificación</span>
-              <span class="setting-subtitle">Tono sutil al terminar o requerir confirmación</span>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="toggle-notification-sound" checked />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-
-          <div class="setting-item column" id="setting-accent-section">
-            <div class="setting-text">
-              <span class="setting-title">Color de acento</span>
-              <span class="setting-subtitle">Personaliza la tonalidad de la barra y terminales</span>
-            </div>
-            <div class="accent-palette-row">
-              <button class="color-swatch active" data-color="#FF6B00" style="background-color: #FF6B00;" title="Naranja Obsidiana (#FF6B00)"></button>
-              <button class="color-swatch" data-color="#8B5CF6" style="background-color: #8B5CF6;" title="Violeta Cuarzo (#8B5CF6)"></button>
-              <button class="color-swatch" data-color="#06B6D4" style="background-color: #06B6D4;" title="Cian Eléctrico (#06B6D4)"></button>
-              <button class="color-swatch" data-color="#10B981" style="background-color: #10B981;" title="Verde Esmeralda (#10B981)"></button>
-              <button class="color-swatch" data-color="#F43F5E" style="background-color: #F43F5E;" title="Carmesí Neón (#F43F5E)"></button>
-              <button class="color-swatch" data-color="#E4E4E7" style="background-color: #E4E4E7;" title="Monocromo Plata (#E4E4E7)"></button>
-              <label class="color-picker-label" title="Color personalizado">
-                <input type="color" id="input-accent-picker" value="#FF6B00" class="color-picker-input" />
-                <span class="color-picker-preview" id="color-picker-preview"></span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Sección Apariencia y Fondo (Fase 30) -->
-          <div class="setting-item column" id="setting-appearance-section">
-            <div class="setting-text">
-              <span class="setting-title">Apariencia y Fondo</span>
-              <span class="setting-subtitle">Transparencia, desenfoque y wallpaper de la terminal</span>
-            </div>
-
-            <!-- Opacidad del fondo -->
-            <div class="setting-slider-group">
-              <div class="setting-slider-header">
-                <span class="slider-label">Opacidad del fondo</span>
-                <span class="slider-value" id="label-terminal-opacity">70%</span>
-              </div>
-              <input type="range" id="input-terminal-opacity" min="0.2" max="1.0" step="0.05" value="0.70" class="setting-range" />
-            </div>
-
-            <!-- Desenfoque del fondo (Blur) -->
-            <div class="setting-slider-group">
-              <div class="setting-slider-header">
-                <span class="slider-label">Desenfoque del fondo (Blur)</span>
-                <span class="slider-value" id="label-terminal-blur">14px</span>
-              </div>
-              <input type="range" id="input-terminal-blur" min="0" max="30" step="1" value="14" class="setting-range" />
-            </div>
-
-            <!-- Imagen de fondo (Wallpaper) -->
-            <div class="setting-wallpaper-group">
-              <div class="setting-slider-header">
-                <span class="slider-label">Imagen de fondo</span>
-                <span class="wallpaper-status-badge" id="label-wallpaper-status">Sin imagen</span>
-              </div>
-              <div class="setting-actions-row">
-                <button type="button" class="setting-action-button" id="btn-select-wallpaper">Elegir imagen...</button>
-                <button type="button" class="setting-action-button danger hidden" id="btn-remove-wallpaper">Quitar imagen</button>
-              </div>
-              <input type="file" id="input-wallpaper-file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" style="display: none;" />
-            </div>
-          </div>
-
-          <div class="setting-item column">
-            <div class="setting-text">
-              <span class="setting-title">Widget en modo píldora</span>
-              <span class="setting-subtitle">Información mostrada en reposo (260x34)</span>
-            </div>
-            <select id="select-collapsed-widget" class="setting-select">
-              <option value="pty_status">Sesiones PTY activas (Por defecto)</option>
-              <option value="clock">Reloj digital en tiempo real</option>
-              <option value="system_metrics">Uso de CPU y Memoria RAM</option>
-              <option value="live_log">Log vivo / Última salida ANSI</option>
-            </select>
-          </div>
-
-          <div class="setting-item" id="setting-clock-row" style="display: none;">
-            <div class="setting-text">
-              <span class="setting-title">Formato de 24 horas</span>
-              <span class="setting-subtitle">Desactivar para formato 12h (AM/PM)</span>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="toggle-clock-24h" checked />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-
-          <div class="setting-item column" id="setting-recent-folders-section">
-            <div class="setting-text">
-              <span class="setting-title">Carpetas recientes</span>
-              <span class="setting-subtitle">Historial de directorios de trabajo</span>
-            </div>
-            <div class="setting-actions-row">
-              <button type="button" class="setting-action-button" id="btn-settings-open-folder">Abrir carpeta...</button>
-              <button type="button" class="setting-action-button danger" id="btn-settings-clear-folders">Limpiar</button>
-            </div>
-          </div>
-        </div>
-      </main>
+              </main>
 
       <!-- Controladores de Redimensionamiento Manual (Fase 27 y Fase 32) -->
       <div class="resize-handle resize-left" id="resize-left" title="Redimensionar ancho"></div>

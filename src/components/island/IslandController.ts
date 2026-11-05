@@ -91,10 +91,11 @@ export class IslandController {
     this.currentMode = mode;
     this.resetIdleTimer();
 
-    this.islandContainer.classList.remove("state-collapsed", "state-glance", "state-expanded");
+    this.islandContainer.classList.remove("state-collapsed", "state-glance", "state-expanded", "state-fullscreen");
     this.islandContainer.classList.add(`state-${mode}`);
 
-    if (mode !== "expanded") {
+    // Fullscreen and expanded modes should keep popovers/search bar open
+    if (mode !== "expanded" && mode !== "fullscreen") {
       this.callbacks.closeAllPopovers();
       this.callbacks.closeSearchBar();
     }
@@ -107,7 +108,7 @@ export class IslandController {
       }
     }
 
-    if (mode === "expanded") {
+    if (mode === "expanded" || mode === "fullscreen") {
       this.callbacks.fitActiveTabPanes(true, true);
     }
 
@@ -124,7 +125,7 @@ export class IslandController {
   }
 
   public updateGlanceView(title: string, snippet: string, status: string): void {
-    if (this.currentMode !== "expanded" && !this.activeCliNotification) {
+    if (this.currentMode !== "expanded" && this.currentMode !== "fullscreen" && !this.activeCliNotification) {
       this.glanceTitle.textContent = title;
       this.glanceSnippet.textContent = snippet;
       this.glanceStatusTag.textContent = status.toUpperCase();
@@ -341,7 +342,8 @@ export class IslandController {
         if (this.currentMode === "expanded") {
           // Si el usuario mantiene el ratón presionado (seleccionando texto o arrastrando),
           // o si el ratón volvió a ingresar al contenedor, o si hay un popover abierto, no cerrar
-          if (this.isMouseDown || this.isMouseOverContainer) {
+          const hasActiveSelection = (document.getSelection()?.toString().length ?? 0) > 0;
+          if (this.isMouseDown || this.isMouseOverContainer || hasActiveSelection) {
             return;
           }
           if (this.callbacks.isAnyPopoverOpen() || this.callbacks.isSearchBarOpen()) {
@@ -426,7 +428,8 @@ export class IslandController {
       }
 
       // Si el usuario está seleccionando texto, arrastrando o con el botón pulsado, NO colapsar
-      if (this.isMouseDown || (e.buttons && e.buttons !== 0)) {
+      const hasActiveSelection = (document.getSelection()?.toString().length ?? 0) > 0;
+      if (this.isMouseDown || (e.buttons && e.buttons !== 0) || hasActiveSelection) {
         return;
       }
 

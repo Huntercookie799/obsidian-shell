@@ -1,4 +1,5 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { readFile } from "@tauri-apps/plugin-fs";
 import { hexToRgb } from "../TerminalView";
 import { stateManager } from "../../core/StateManager";
 import { promptSelectWallpaperImage } from "../../utils/formatters";
@@ -172,10 +173,48 @@ export class AppearanceManager {
     }
     const clean = imagePathOrDataUrl.trim();
     let bgUrl: string;
+
     if (clean.startsWith("data:") || clean.startsWith("blob:") || clean.startsWith("http://") || clean.startsWith("https://")) {
+      // Data URLs, blob URLs, and remote URLs can be used directly
       bgUrl = clean;
     } else {
-      bgUrl = convertFileSrc(clean);
+      // Local file path: read the file using Tauri FS plugin and convert to data URL
+      try {
+        // Convert Windows path to proper file:// URL (file:///C:/path on Windows)
+        let fileUrl: string;
+        if (clean.startsWith("file://")) {
+          fileUrl = clean;
+        } else if (/^[A-Za-z]:\\/.test(clean) || /^[A-Za-z]:\//.test(clean)) {
+          // Windows absolute path like C:\path or C:/path
+          fileUrl = `file:///${clean.replace(/\\/g, "/")}`;
+        } else if (clean.startsWith("/")) {
+          // Unix absolute path
+          fileUrl = `file://${clean}`;
+        } else {
+          // Relative path - use as-is
+          fileUrl = clean;
+        }
+        const binaryData = await readFile(fileUrl);
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(binaryData)));
+        const mimeType = this.getMimeType(clean);
+        bgUrl = `data:${mimeType};base64,${base64}`;
+        console.log("[AppearanceManager] Wallpaper loaded successfully via FS plugin", { fileUrl });
+      } catch (err) {
+        console.error("[AppearanceManager] Error al leer archivo de wallpaper con FS plugin:", err);
+        // Fallback to convertFileSrc (may work for some paths)
+        try {
+          bgUrl = convertFileSrc(clean);
+          console.log("[AppearanceManager] Fallback to convertFileSrc succeeded");
+        } catch (err2) {
+          console.error("[AppearanceManager] convertFileSrc also failed:", err2);
+          bgUrl = "";
+        }
+      }
+    }
+
+    if (!bgUrl) {
+      console.error("[AppearanceManager] No se pudo cargar el wallpaper");
+      return;
     }
 
     document.documentElement.style.setProperty("--terminal-bg-image", `url("${bgUrl}")`);
@@ -200,6 +239,19 @@ export class AppearanceManager {
     }
     if (this.btnRemoveWallpaper) {
       this.btnRemoveWallpaper.classList.remove("hidden");
+    }
+  }
+
+  private getMimeType(filePath: string): string {
+    const ext = filePath.split(".").pop()?.toLowerCase();
+    switch (ext) {
+      case "png": return "image/png";
+      case "jpg":
+      case "jpeg": return "image/jpeg";
+      case "webp": return "image/webp";
+      case "gif": return "image/gif";
+      case "bmp": return "image/bmp";
+      default: return "image/png";
     }
   }
 

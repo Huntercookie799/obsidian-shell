@@ -10,7 +10,7 @@ pub fn set_island_state(
 ) -> Result<(), String> {
     *state_holder.0.lock() = state;
     update_island_geometry(&window, state)?;
-    if state == IslandState::Expanded {
+    if state == IslandState::Expanded || state == IslandState::Fullscreen {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();

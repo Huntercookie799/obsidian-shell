@@ -78,6 +78,7 @@ pub enum IslandState {
     Collapsed,
     Glance,
     Expanded,
+    Fullscreen,
 }
 
 pub fn update_island_geometry_on_monitor(
@@ -110,6 +111,10 @@ pub fn update_island_geometry_on_monitor(
                 IslandState::Collapsed => (260.0, 34.0),
                 IslandState::Glance => (420.0, 64.0),
                 IslandState::Expanded => (exp_w, exp_h),
+                IslandState::Fullscreen => {
+                    // Fullscreen: use full monitor size
+                    return update_fullscreen_geometry(window, &monitor_pos, &monitor_size);
+                }
             };
 
             let pw = (logical_w * scale_factor).round() as u32;
@@ -133,7 +138,10 @@ pub fn update_island_geometry_on_monitor(
         }
         DockPosition::LeftEdge { y_ratio } => {
             let safe_ratio = y_ratio.clamp(0.0, 1.0);
-            if state == IslandState::Collapsed {
+            if state == IslandState::Fullscreen {
+                // Fullscreen: use full monitor size regardless of dock position
+                return update_fullscreen_geometry(window, &monitor_pos, &monitor_size);
+            } else if state == IslandState::Collapsed {
                 // Modo Pestaña Vertical: 34x260
                 let pw = (34.0 * scale_factor).round() as u32;
                 let ph = (260.0 * scale_factor).round() as u32;
@@ -171,7 +179,10 @@ pub fn update_island_geometry_on_monitor(
         }
         DockPosition::RightEdge { y_ratio } => {
             let safe_ratio = y_ratio.clamp(0.0, 1.0);
-            if state == IslandState::Collapsed {
+            if state == IslandState::Fullscreen {
+                // Fullscreen: use full monitor size regardless of dock position
+                return update_fullscreen_geometry(window, &monitor_pos, &monitor_size);
+            } else if state == IslandState::Collapsed {
                 // Modo Pestaña Vertical: 34x260
                 let pw = (34.0 * scale_factor).round() as u32;
                 let ph = (260.0 * scale_factor).round() as u32;
@@ -221,6 +232,31 @@ pub fn update_island_geometry_on_monitor(
         .map_err(|e| format!("Failed to set window position: {}", e))?;
 
     // Lock manual edge-dragging by user and prevent rectangular DWM window shadow
+    let _ = window.set_resizable(false);
+    let _ = window.set_shadow(false);
+
+    Ok(())
+}
+
+// Fullscreen geometry - maximize window to fill the entire monitor
+fn update_fullscreen_geometry(
+    window: &WebviewWindow,
+    monitor_pos: &tauri::PhysicalPosition<i32>,
+    monitor_size: &tauri::PhysicalSize<u32>,
+) -> Result<(), String> {
+    // Temporarily allow resize during programmatic state transition
+    let _ = window.set_resizable(true);
+
+    // Set window to full monitor size
+    window
+        .set_size(tauri::PhysicalSize::new(monitor_size.width, monitor_size.height))
+        .map_err(|e| format!("Failed to set fullscreen window size: {}", e))?;
+
+    window
+        .set_position(*monitor_pos)
+        .map_err(|e| format!("Failed to set fullscreen window position: {}", e))?;
+
+    // Lock manual edge-dragging and prevent shadow in fullscreen
     let _ = window.set_resizable(false);
     let _ = window.set_shadow(false);
 

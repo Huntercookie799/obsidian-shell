@@ -280,7 +280,6 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
   let isUserScrolledUp = false;
   let pendingOutput = "";
   let rafScheduled = false;
-  let bgTimerScheduled = false;
 
   // Botón flotante para saltar al final (↓ Final)
   const scrollBottomBtn = document.createElement("button");
@@ -315,7 +314,6 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
   // Vacía y procesa todo el buffer pendiente directamente en Xterm
   const flushOutput = () => {
     rafScheduled = false;
-    bgTimerScheduled = false;
     if (pendingOutput.length === 0) return;
 
     const chunk = pendingOutput;
@@ -329,27 +327,24 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
   };
 
   // Renderizado híbrido optimizado:
-  // - En modo expandido: sincronizado con requestAnimationFrame (60 Hz fluido en monitor).
-  // - En modo colapsado/minimizado: los navegadores pausan o retrasan los RAF, por lo que usamos
-  //   un temporizador continuo setTimeout(..., 16) para que Xterm procese los datos en segundo plano
-  //   sin acumular una montaña de bytes para el momento en que el usuario abre la terminal.
+  // - En modo expandido/fullscreen: sincronizado con requestAnimationFrame (60 Hz fluido).
+  // - En modo colapsado/glance: NO procesar output en background (ahorra CPU).
+  //   El output se acumula en pendingOutput y se vacía al expandir.
   const writeBatched = (data: string) => {
     pendingOutput += data;
 
     const island = document.getElementById("island-container");
-    const isExpanded = island?.classList.contains("state-expanded");
+    const isExpanded = island?.classList.contains("state-expanded") ||
+                       island?.classList.contains("state-fullscreen");
 
     if (isExpanded) {
       if (!rafScheduled) {
         rafScheduled = true;
         requestAnimationFrame(flushOutput);
       }
-    } else {
-      if (!bgTimerScheduled) {
-        bgTimerScheduled = true;
-        window.setTimeout(flushOutput, 16);
-      }
     }
+    // En colapsado/glance: no programar flushOutput continuo.
+    // El buffer se procesará al expandir via flushOutput() en fitActiveTabPanes.
   };
 
   // Restablece el scroll y ancla la terminal directamente al fondo activo

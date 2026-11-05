@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { SessionSnapshot, SnapshotPane, SnapshotTab, TerminalPane, TerminalTab } from "../../types";
 import { CliActivityTracker, CliNotificationEvent } from "../../utils/cliNotifications";
 import { SplitManager } from "./SplitManager";
+import { SettingsTab } from "./SettingsTab";
+import { AppearanceManager } from "../popovers/AppearanceManager";
 
 export interface TabManagerCallbacks {
   getAccentColor: () => string;
@@ -12,6 +14,10 @@ export interface TabManagerCallbacks {
   onDismissCliNotification: (collapseToPill: boolean) => void;
   getActiveCliNotification: () => CliNotificationEvent | null;
   isRestoreSessionEnabled: () => boolean;
+  onDockPositionChange?: (dock: any) => void;
+  onWidgetChange?: (widget: any) => void;
+  onClock24hChange?: (is24h: boolean) => void;
+  onAutoHideChange?: (enabled: boolean, minutes: number) => void;
 }
 
 export class TabManager {
@@ -26,9 +32,15 @@ export class TabManager {
   private tabsListEl!: HTMLElement;
   private splitManager: SplitManager;
   private callbacks: TabManagerCallbacks;
+  private settingsTab: SettingsTab | null = null;
+  private settingsTabId = "tab-settings";
+  private settingsContainerEl: HTMLElement | null = null;
+  private appearanceManager: AppearanceManager | null = null;
+  private settingsTabCreated = false;
 
-  constructor(callbacks: TabManagerCallbacks) {
+  constructor(callbacks: TabManagerCallbacks, appearanceManager?: AppearanceManager) {
     this.callbacks = callbacks;
+    this.appearanceManager = appearanceManager || null;
 
     this.splitManager = new SplitManager({
       getAccentColor: () => this.callbacks.getAccentColor(),
@@ -53,6 +65,20 @@ export class TabManager {
   public initDom(): void {
     this.viewportEl = document.getElementById("terminal-viewport")!;
     this.tabsListEl = document.getElementById("tabs-list")!;
+
+    // Create settings tab container (initially hidden)
+    this.settingsContainerEl = document.createElement("div");
+    this.settingsContainerEl.className = "tab-panes-container layout-single hidden";
+    this.settingsContainerEl.id = `container-${this.settingsTabId}`;
+    this.viewportEl.appendChild(this.settingsContainerEl);
+
+    // Initialize SettingsTab
+    this.settingsTab = new SettingsTab({
+      onDockPositionChange: (dock) => this.callbacks.onDockPositionChange?.(dock),
+      onWidgetChange: (widget) => this.callbacks.onWidgetChange?.(widget),
+      onClock24hChange: (is24h) => this.callbacks.onClock24hChange?.(is24h),
+      onAutoHideChange: (enabled, minutes) => this.callbacks.onAutoHideChange?.(enabled, minutes),
+    }, this.appearanceManager);
   }
 
   public getActiveTabId(): string | null {
@@ -118,6 +144,15 @@ export class TabManager {
   }
 
   public switchTab(tabId: string): void {
+    // Handle settings tab
+    if (tabId === this.settingsTabId) {
+      this.activeTabId = tabId;
+      this.showSettingsTab();
+      this.renderTabsList();
+      this.callbacks.onPillSummaryUpdate();
+      return;
+    }
+
     const tab = this.tabs.get(tabId);
     if (!tab) return;
 
@@ -138,6 +173,11 @@ export class TabManager {
       }
     });
 
+    // Hide settings tab if visible
+    if (this.settingsContainerEl) {
+      this.settingsContainerEl.classList.add("hidden");
+    }
+
     this.renderTabsList();
     this.callbacks.onPillSummaryUpdate();
     this.scheduleAutoSave();
@@ -145,6 +185,23 @@ export class TabManager {
     if (this.callbacks.isExpanded()) {
       this.fitActiveTabPanes(true, true);
     }
+  }
+
+  private showSettingsTab(): void {
+    // Hide all regular tab containers
+    this.tabs.forEach((t) => {
+      t.containerElement.classList.remove("active");
+      t.panes.forEach((p) => p.disableWebgl?.());
+    });
+
+    // Show settings container
+    if (this.settingsContainerEl) {
+      this.settingsContainerEl.classList.remove("hidden");
+      this.settingsContainerEl.classList.add("active");
+    }
+
+    // Settings tab content is already initialized in createSettingsTab
+    // No need to re-initialize here (was causing double render)
   }
 
   public cycleTab(direction: "next" | "prev" = "next"): void {
@@ -212,6 +269,12 @@ export class TabManager {
     const tab = this.tabs.get(tabId);
     if (!tab) return;
 
+    // Handle settings tab specially
+    if (tabId === this.settingsTabId) {
+      this.closeSettingsTab();
+      return;
+    }
+
     tab.panes.forEach((pane) => {
       this.splitManager.cleanupSession(pane.sessionId);
       try {
@@ -242,11 +305,42 @@ export class TabManager {
     this.scheduleAutoSave();
   }
 
+  /**
+   * Closes the settings tab
+   */
+  public closeSettingsTab(): void {
+    const tab = this.tabs.get(this.settingsTabId);
+    if (!tab) return;
+
+    // Remove container element
+    tab.containerElement.remove();
+    this.tabs.delete(this.settingsTabId);
+    this.settingsTabCreated = false;
+    this.settingsContainerEl = null;
+    this.settingsTab = null;
+
+    // Switch to another tab if settings was active
+    if (this.activeTabId === this.settingsTabId) {
+      const nextTabId = this.tabs.keys().next().value;
+      if (nextTabId) {
+        this.switchTab(nextTabId);
+      }
+    }
+
+    this.renderTabsList();
+    this.callbacks.onPillSummaryUpdate();
+    this.scheduleAutoSave();
+  }
+
   public renderTabsList(): void {
     if (!this.tabsListEl) return;
     this.tabsListEl.innerHTML = "";
 
+    // Render regular tabs (skip settings tab)
     this.tabs.forEach((tab) => {
+      // Skip settings tab - it's rendered separately with its own styling
+      if (tab.isSettingsTab) return;
+
       const tabEl = document.createElement("div");
       tabEl.className = `tab-item ${tab.id === this.activeTabId ? "active" : ""}`;
       tabEl.dataset.tabId = tab.id;
@@ -278,8 +372,126 @@ export class TabManager {
         this.switchTab(tab.id);
       });
 
+      // Middle-click (clic central) para cerrar pestaña
+      tabEl.addEventListener("auxclick", (e) => {
+        if (e.button === 1) {
+          e.preventDefault();
+          e.stopPropagation();
+          this.closeTab(tab.id);
+        }
+      });
+
       this.tabsListEl.appendChild(tabEl);
     });
+
+    // Render settings tab in list if it exists
+    if (this.settingsTabCreated && this.tabs.has(this.settingsTabId)) {
+      this.renderSettingsTabInList();
+    }
+  }
+
+  /**
+   * Opens the settings tab. If it already exists, switches to it.
+   * If it doesn't exist, creates it as a new closable tab.
+   */
+  public openSettingsTab(): void {
+    // If settings tab already exists, just switch to it
+    if (this.settingsTabCreated && this.tabs.has(this.settingsTabId)) {
+      this.switchTab(this.settingsTabId);
+      return;
+    }
+
+    // Create settings tab as a regular tab
+    this.createSettingsTab();
+  }
+
+  private createSettingsTab(): void {
+    // Create container element
+    this.settingsContainerEl = document.createElement("div");
+    this.settingsContainerEl.className = "tab-panes-container layout-single";
+    this.settingsContainerEl.id = `container-${this.settingsTabId}`;
+    this.viewportEl.appendChild(this.settingsContainerEl);
+
+    // Create tab object
+    const tab: TerminalTab = {
+      id: this.settingsTabId,
+      title: "Ajustes",
+      layout: "single",
+      panes: [],
+      activePaneId: "",
+      containerElement: this.settingsContainerEl as HTMLDivElement,
+      isSettingsTab: true, // Custom property to identify settings tab
+    };
+
+    this.tabs.set(this.settingsTabId, tab);
+    this.settingsTabCreated = true;
+
+    // Initialize SettingsTab
+    this.settingsTab = new SettingsTab({
+      onDockPositionChange: (dock) => this.callbacks.onDockPositionChange?.(dock),
+      onWidgetChange: (widget) => this.callbacks.onWidgetChange?.(widget),
+      onClock24hChange: (is24h) => this.callbacks.onClock24hChange?.(is24h),
+      onAutoHideChange: (enabled, minutes) => this.callbacks.onAutoHideChange?.(enabled, minutes),
+    }, this.appearanceManager);
+
+    // Initialize the settings content
+    this.settingsTab.initDom(this.settingsContainerEl!).catch((err) => {
+      console.error("[TabManager] Error initializing settings tab:", err);
+    });
+
+    // Switch to the settings tab
+    this.switchTab(this.settingsTabId);
+    this.renderTabsList();
+    this.callbacks.onPillSummaryUpdate();
+  }
+
+  /**
+   * Renders the settings tab in the tab list (only when it exists)
+   */
+  private renderSettingsTabInList(): void {
+    const settingsTabEl = document.createElement("div");
+    settingsTabEl.className = `tab-item settings-tab ${this.activeTabId === this.settingsTabId ? "active" : ""}`;
+    settingsTabEl.dataset.tabId = this.settingsTabId;
+
+    const icon = document.createElement("span");
+    icon.className = "tab-settings-icon";
+    icon.innerHTML = `
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+    `;
+
+    const title = document.createElement("span");
+    title.textContent = "Ajustes";
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "tab-close-btn";
+    closeBtn.innerHTML = "&times;";
+    closeBtn.title = "Cerrar pestaña de ajustes";
+    closeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.closeSettingsTab();
+    });
+
+    settingsTabEl.appendChild(icon);
+    settingsTabEl.appendChild(title);
+    settingsTabEl.appendChild(closeBtn);
+
+    settingsTabEl.addEventListener("click", () => {
+      this.switchTab(this.settingsTabId);
+    });
+
+    // Middle-click to close settings tab
+    settingsTabEl.addEventListener("auxclick", (e) => {
+      if (e.button === 1) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.closeSettingsTab();
+      }
+    });
+
+    this.tabsListEl.appendChild(settingsTabEl);
   }
 
   public updatePaneStatus(tab: TerminalTab, pane: TerminalPane, status: "idle" | "running" | "done" | "error"): void {

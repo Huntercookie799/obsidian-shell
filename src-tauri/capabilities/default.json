@@ -15,6 +15,24 @@
     "process:allow-restart",
     "autostart:default",
     "dialog:default",
-    "dialog:allow-open"
+    "dialog:allow-open",
+    "fs:default",
+    "fs:allow-read-file",
+    "fs:allow-read-dir",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$DESKTOP/**" },
+        { "path": "$DOCUMENT/**" },
+        { "path": "$DOWNLOAD/**" },
+        { "path": "$HOME/**" },
+        { "path": "$APPDATA/**" },
+        { "path": "$TEMP/**" },
+        { "path": "$PICTURE/**" },
+        { "path": "$VIDEO/**" },
+        { "path": "$MUSIC/**" },
+        { "path": "$PUBLIC/**" }
+      ]
+    }
   ]
 }

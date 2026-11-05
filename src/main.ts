@@ -7,7 +7,6 @@ import { formatPathSnippet, promptOpenFolder, promptSelectWallpaperImage } from 
 import { AppearanceManager } from "./components/popovers/AppearanceManager";
 import { FolderHistoryPopover } from "./components/popovers/FolderHistoryPopover";
 import { ShellLauncherPopover } from "./components/popovers/ShellLauncherPopover";
-import { SettingsPopover } from "./components/popovers/SettingsPopover";
 import { PillWidgets } from "./components/widgets/PillWidgets";
 import { TabManager } from "./components/terminal/TabManager";
 import { SearchBar } from "./components/terminal/SearchBar";
@@ -25,7 +24,6 @@ class VayliIslandApp {
   private appearanceManager!: AppearanceManager;
   private folderPopover!: FolderHistoryPopover;
   private shellPopover!: ShellLauncherPopover;
-  private settingsPopoverController!: SettingsPopover;
   private pillWidgets!: PillWidgets;
   private tabManager!: TabManager;
   private searchBar!: SearchBar;
@@ -45,6 +43,7 @@ class VayliIslandApp {
   private btnToggleSearch!: HTMLButtonElement;
   private btnSplitVertical!: HTMLButtonElement;
   private btnSplitHorizontal!: HTMLButtonElement;
+  private btnMaximize!: HTMLButtonElement;
 
   public async init() {
     this.appearanceManager = new AppearanceManager({
@@ -72,25 +71,6 @@ class VayliIslandApp {
       await this.tabManager.createTab(cmd, cwd);
     });
 
-    this.settingsPopoverController = new SettingsPopover({
-      onDockPositionChange: async (pos) => {
-        await this.dockingManager.setDockPosition(pos);
-      },
-      onWidgetChange: () => {
-        this.pillWidgets.applyWidget(this.settings.collapsedWidget);
-        this.updatePillSummary();
-      },
-      onClock24hChange: () => {
-        this.pillWidgets.updateClock();
-      },
-      onAutoHideChange: (enabled) => {
-        this.islandController.resetIdleTimer();
-        if (!enabled) {
-          this.islandController.showFromIdle();
-        }
-      },
-    });
-
     this.pillWidgets = new PillWidgets();
 
     this.tabManager = new TabManager({
@@ -110,7 +90,23 @@ class VayliIslandApp {
       onDismissCliNotification: (collapse) => this.islandController.dismissCliNotification(collapse),
       getActiveCliNotification: () => this.islandController.getActiveCliNotification(),
       isRestoreSessionEnabled: () => !!this.settings.restoreSessionOnStartup,
-    });
+      onDockPositionChange: async (pos) => {
+        await this.dockingManager.setDockPosition(pos);
+      },
+      onWidgetChange: () => {
+        this.pillWidgets.applyWidget(this.settings.collapsedWidget);
+        this.updatePillSummary();
+      },
+      onClock24hChange: () => {
+        this.pillWidgets.updateClock();
+      },
+      onAutoHideChange: (enabled) => {
+        this.islandController.resetIdleTimer();
+        if (!enabled) {
+          this.islandController.showFromIdle();
+        }
+      },
+    }, this.appearanceManager);
 
     this.searchBar = new SearchBar({
       getActivePane: () => this.tabManager.getActivePane(),
@@ -145,6 +141,8 @@ class VayliIslandApp {
         } else {
           this.pillWidgets.pause();
         }
+        // Update maximize button icon based on mode
+        this.updateMaximizeButtonIcon(mode);
       },
       onIdleStateChanged: (isHidden) => {
         if (isHidden) {
@@ -156,8 +154,8 @@ class VayliIslandApp {
     });
 
     this.dockingManager = new DockingManager({
-      onDockPositionChanged: (pos) => {
-        this.settingsPopoverController.syncDockPosition(pos.type);
+      onDockPositionChanged: (_pos) => {
+        // Settings tab will sync when opened
       },
     });
 
@@ -213,6 +211,7 @@ class VayliIslandApp {
     this.btnToggleSearch = document.getElementById("btn-toggle-search") as HTMLButtonElement;
     this.btnSplitVertical = document.getElementById("btn-split-vertical") as HTMLButtonElement;
     this.btnSplitHorizontal = document.getElementById("btn-split-horizontal") as HTMLButtonElement;
+    this.btnMaximize = document.getElementById("btn-maximize") as HTMLButtonElement;
 
     this.btnVersionBadge = document.getElementById("btn-version-badge") as HTMLButtonElement;
     this.versionText = document.getElementById("version-text")!;
@@ -228,14 +227,12 @@ class VayliIslandApp {
     this.appearanceManager.initDom();
     this.folderPopover.initDom();
     this.shellPopover.initDom();
-    this.settingsPopoverController.initDom();
     this.tabManager.initDom();
     this.searchBar.initDom();
   }
 
   private async loadSettings(): Promise<void> {
     this.settings = stateManager.loadSettings();
-    await this.settingsPopoverController.syncValuesFromSettings();
 
     try {
       await invoke("set_show_over_fullscreen", { enabled: !!this.settings.showOverFullscreen });
@@ -257,8 +254,6 @@ class VayliIslandApp {
         console.debug("Error al ubicar notch en pantalla guardada:", err);
       }
     }
-
-    await this.settingsPopoverController.refreshMonitorsList();
 
     const opacity = typeof this.settings.terminalOpacity === "number" ? this.settings.terminalOpacity : 0.70;
     this.appearanceManager.applyTerminalOpacity(opacity);
@@ -294,14 +289,12 @@ class VayliIslandApp {
 
   public isAnyPopoverOpen(): boolean {
     return (
-      this.settingsPopoverController.isVisible() ||
       this.shellPopover.isVisible() ||
       this.folderPopover.isVisible()
     );
   }
 
   public closeAllPopovers(): void {
-    this.settingsPopoverController?.hide();
     this.shellPopover?.hide();
     this.folderPopover?.hide();
   }
@@ -311,7 +304,6 @@ class VayliIslandApp {
       await this.islandController.setMode("expanded");
     }
     this.shellPopover.hide();
-    this.settingsPopoverController.hide();
     this.folderPopover.toggle();
   }
 
@@ -320,7 +312,6 @@ class VayliIslandApp {
       await this.islandController.setMode("expanded");
     }
     this.folderPopover.hide();
-    this.settingsPopoverController.hide();
     this.shellPopover.toggle();
   }
 
@@ -330,7 +321,36 @@ class VayliIslandApp {
     }
     this.shellPopover.hide();
     this.folderPopover.hide();
-    this.settingsPopoverController.toggle();
+    // Open settings tab (creates it if it doesn't exist)
+    this.tabManager.openSettingsTab();
+  }
+
+  public async toggleMaximize(): Promise<void> {
+    const currentMode = this.islandController.getMode();
+    if (currentMode === "fullscreen") {
+      // Exit fullscreen - go back to expanded
+      await this.islandController.setMode("expanded");
+    } else {
+      // Enter fullscreen
+      if (!this.islandController.isExpanded()) {
+        await this.islandController.setMode("expanded");
+      }
+      await this.islandController.setMode("fullscreen");
+    }
+  }
+
+  private updateMaximizeButtonIcon(mode: IslandMode): void {
+    if (!this.btnMaximize) return;
+    const isFullscreen = mode === "fullscreen";
+    // Change icon based on mode: maximize icon when not fullscreen, minimize icon when fullscreen
+    this.btnMaximize.innerHTML = isFullscreen
+      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 14h6v6H4v-6zm10 0h6v6h-6v-6zm-10-10h6V4H4v6zm10 0h6V4h-6v6z"></path>
+        </svg>`
+      : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+        </svg>`;
+    this.btnMaximize.title = isFullscreen ? "Salir de pantalla completa (F11)" : "Pantalla completa (F11)";
   }
 
   public async openFolderInTerminal(folderPath: string): Promise<void> {
@@ -387,7 +407,7 @@ class VayliIslandApp {
     listen<number>("monitor-changed", (event) => {
       const newIdx = event.payload;
       stateManager.saveSettings({ targetMonitorIndex: newIdx });
-      this.settingsPopoverController.syncActiveMonitor(newIdx);
+      // Settings tab will refresh when opened
     });
 
     listen("tray-quit-requested", async () => {
@@ -436,6 +456,11 @@ class VayliIslandApp {
     this.btnSettings.addEventListener("click", (e) => {
       e.stopPropagation();
       this.toggleSettings();
+    });
+
+    this.btnMaximize.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.toggleMaximize();
     });
 
     const btnCollapse = document.getElementById("btn-collapse");

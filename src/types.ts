@@ -3,7 +3,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { SerializeAddon } from "@xterm/addon-serialize";
 
-export type IslandMode = "collapsed" | "glance" | "expanded";
+export type IslandMode = "collapsed" | "glance" | "expanded" | "fullscreen";
 export type SplitLayout = "single" | "split-vertical" | "split-horizontal";
 export type CollapsedWidgetType = "pty_status" | "clock" | "system_metrics" | "live_log";
 
@@ -92,6 +92,7 @@ export interface TerminalTab {
   panes: TerminalPane[];
   activePaneId: string;
   containerElement: HTMLDivElement;
+  isSettingsTab?: boolean;
 }
 
 export interface SnapshotPane {

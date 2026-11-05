@@ -28,6 +28,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             Some(vec!["--autostart"]),
@@ -41,7 +42,7 @@ pub fn run() {
                         let mut current = state_holder.0.lock();
                         let next = match *current {
                             IslandState::Collapsed | IslandState::Glance => IslandState::Expanded,
-                            IslandState::Expanded => IslandState::Collapsed,
+                            IslandState::Expanded | IslandState::Fullscreen => IslandState::Collapsed,
                         };
                         *current = next;
                         drop(current);
@@ -74,10 +75,11 @@ pub fn run() {
                 let _ = update_island_geometry(&window, IslandState::Collapsed);
 
                 // Hilo de sondeo ligero para Edge Hover Wakeup (Fase 31)
+                // Intervalo 200ms (5 Hz) para reducir CPU en idle; 80ms era 12.5 Hz
                 let window_clone = window.clone();
                 std::thread::spawn(move || {
                     loop {
-                        std::thread::sleep(std::time::Duration::from_millis(80));
+                        std::thread::sleep(std::time::Duration::from_millis(200));
                         if window::is_idle_hidden() {
                             if let Some(cursor) = window::get_cursor_pos() {
                                 if window::is_cursor_near_dock(&window_clone, cursor) {
@@ -122,7 +124,7 @@ pub fn run() {
                             let mut current = state_holder.0.lock();
                             let next = match *current {
                                 IslandState::Collapsed | IslandState::Glance => IslandState::Expanded,
-                                IslandState::Expanded => IslandState::Collapsed,
+                                IslandState::Expanded | IslandState::Fullscreen => IslandState::Collapsed,
                             };
                             *current = next;
                             drop(current);
@@ -181,7 +183,7 @@ pub fn run() {
                         let mut current = state_holder.0.lock();
                         let next = match *current {
                             IslandState::Collapsed | IslandState::Glance => IslandState::Expanded,
-                            IslandState::Expanded => IslandState::Collapsed,
+                            IslandState::Expanded | IslandState::Fullscreen => IslandState::Collapsed,
                         };
                         *current = next;
                         drop(current);
