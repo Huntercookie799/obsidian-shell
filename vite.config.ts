@@ -20,4 +20,22 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+  build: {
+    target: process.env.TAURI_ENV_PLATFORM === "windows" ? "chrome105" : "safari13",
+    minify: !process.env.TAURI_ENV_DEBUG ? "esbuild" : false,
+    sourcemap: !!process.env.TAURI_ENV_DEBUG,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/@xterm")) {
+            return "vendor-xterm";
+          }
+          if (id.includes("node_modules/@tauri-apps")) {
+            return "vendor-tauri";
+          }
+        },
+      },
+    },
+    chunkSizeWarningLimit: 800,
+  },
 }));

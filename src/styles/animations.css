@@ -1,0 +1,74 @@
+/* ==========================================================================
+   Rim Light: Dynamic Edge Glow & Pulse Animations
+   ========================================================================== */
+.rim-light {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  border: 1px solid transparent;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+  z-index: 2000;
+}
+
+.rim-light.idle {
+  border-color: var(--vayli-border-idle);
+}
+
+.rim-light.running {
+  border-color: var(--vayli-accent-primary);
+  box-shadow: 0 0 14px var(--vayli-accent-glow);
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+.rim-light.done {
+  border-color: var(--vayli-status-success);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+}
+
+.rim-light.error {
+  border-color: var(--vayli-status-error);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.45);
+}
+
+.rim-light.rim-warning {
+  border-color: #F59E0B;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.6);
+  animation: pulse-glow-warning 1.2s infinite ease-in-out;
+}
+
+.rim-light.rim-success {
+  border-color: #10B981;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.6);
+  animation: pulse-glow-success 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse-glow-warning {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(245, 158, 11, 0.8);
+  }
+}
+
+@keyframes pulse-glow-success {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.8);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 6px var(--vayli-accent-glow);
+  }
+  50% {
+    box-shadow: 0 0 16px var(--vayli-accent-hover);
+  }
+}

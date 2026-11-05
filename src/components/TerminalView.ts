@@ -192,6 +192,7 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
   terminal: Terminal;
   fitAddon: FitAddon;
   searchAddon: SearchAddon;
+  getSearchAddon: () => SearchAddon;
   serializeAddon: SerializeAddon;
   serializeBuffer: (maxLines?: number) => string;
   smartPaste: (rawText: string) => void;
@@ -199,6 +200,8 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
   isUserScrolledUp: () => boolean;
   resetScrollToBottom: () => void;
   setSessionId: (newId: string) => void;
+  enableWebgl: () => void;
+  disableWebgl: () => void;
   mount: (container: HTMLElement) => void;
   dispose: () => void;
 } {
@@ -227,12 +230,42 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
   });
 
   const fitAddon = new FitAddon();
-  const searchAddon = new SearchAddon();
   const serializeAddon = new SerializeAddon();
   const unicode11Addon = new Unicode11Addon();
 
+  // Lazy loading de SearchAddon: instanciar y registrar solo bajo demanda
+  let searchAddonInstance: SearchAddon | null = null;
+  const getSearchAddon = (): SearchAddon => {
+    if (!searchAddonInstance) {
+      searchAddonInstance = new SearchAddon();
+      terminal.loadAddon(searchAddonInstance);
+    }
+    return searchAddonInstance;
+  };
+
+  // Gestión dinámica de contexto WebGL para no agotar el límite GPU (8-16) de Chromium/WebView2
+  let webglAddon: WebglAddon | null = null;
+
+  const enableWebgl = () => {
+    // En Windows WebView2 con ventana transparente nativa, WebglAddon crea una swapchain
+    // DirectX sin canal alfa que renderiza un canvas negro opaco.
+    // El renderizador integrado de Xterm con allowTransparency: true ofrece transparencia
+    // cristalina completa a 60 fps sin bloquear el compositor del sistema.
+    return;
+  };
+
+  const disableWebgl = () => {
+    if (!webglAddon) return;
+    try {
+      webglAddon.dispose();
+    } catch (e) {
+      console.debug(`[PTY ${currentSessionId}] Error al liberar contexto WebGL:`, e);
+    } finally {
+      webglAddon = null;
+    }
+  };
+
   terminal.loadAddon(fitAddon);
-  terminal.loadAddon(searchAddon);
   terminal.loadAddon(serializeAddon);
   try {
     terminal.loadAddon(unicode11Addon);
@@ -512,21 +545,8 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
       terminal.textarea.addEventListener("paste", pasteHandler, true);
     }
 
-    // Intento de aceleración WebGL con fallback transparente a Canvas/DOM
-    try {
-      const webglAddon = new WebglAddon();
-      webglAddon.onContextLoss(() => {
-        console.debug(`[PTY ${currentSessionId}] Pérdida de contexto WebGL, revirtiendo a Canvas`);
-        try {
-          webglAddon.dispose();
-        } catch {
-          // Ignorar error al desechar contexto perdido
-        }
-      });
-      terminal.loadAddon(webglAddon);
-    } catch (e) {
-      console.debug("WebGL no disponible o no soportado en este compositor, usando Canvas/DOM:", e);
-    }
+    // Intento de aceleración WebGL inicial con fallback transparente a Canvas/DOM
+    enableWebgl();
 
     container.appendChild(scrollBottomBtn);
 
@@ -557,6 +577,13 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
   };
 
   const dispose = () => {
+    disableWebgl();
+    if (searchAddonInstance) {
+      try {
+        searchAddonInstance.dispose();
+      } catch {}
+      searchAddonInstance = null;
+    }
     if (resizeObserver) {
       resizeObserver.disconnect();
       resizeObserver = null;
@@ -591,7 +618,10 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
   return {
     terminal,
     fitAddon,
-    searchAddon,
+    get searchAddon() {
+      return getSearchAddon();
+    },
+    getSearchAddon,
     serializeAddon,
     serializeBuffer,
     smartPaste,
@@ -601,6 +631,8 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
     setSessionId: (newId: string) => {
       currentSessionId = newId;
     },
+    enableWebgl,
+    disableWebgl,
     mount,
     dispose,
   };

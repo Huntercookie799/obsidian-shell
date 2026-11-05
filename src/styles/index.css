@@ -1,0 +1,12 @@
+/**
+ * ObsidianShell - Modular Style Manifest
+ * Arquitectura modular de estilos (Fase 1 de Reorganización)
+ */
+
+@import "./variables.css";
+@import "./reset.css";
+@import "./animations.css";
+@import "./island.css";
+@import "./widgets.css";
+@import "./terminal.css";
+@import "./popovers.css";

@@ -78,6 +78,10 @@ export interface TerminalPane {
   resetScrollToBottom?: () => void;
   smartPaste?: (rawText: string) => void;
   setSessionId?: (id: string) => void;
+  enableWebgl?: () => void;
+  disableWebgl?: () => void;
+  getSearchAddon?: () => SearchAddon;
+  dispose?: () => void;
   element: HTMLDivElement;
 }
 

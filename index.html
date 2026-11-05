@@ -8,6 +8,9 @@
   </head>
   <body>
     <div id="island-container" class="state-collapsed">
+      <!-- Capa de cristal esmerilado (Frosted Glass backdrop) -->
+      <div id="island-backdrop"></div>
+
       <!-- Vayli Rim Light (Active ambient glow line: 1px-1.5px) -->
       <div id="rim-light" class="rim-light idle"></div>
 
@@ -371,18 +374,18 @@
             <div class="setting-slider-group">
               <div class="setting-slider-header">
                 <span class="slider-label">Opacidad del fondo</span>
-                <span class="slider-value" id="label-terminal-opacity">100%</span>
+                <span class="slider-value" id="label-terminal-opacity">70%</span>
               </div>
-              <input type="range" id="input-terminal-opacity" min="0.2" max="1.0" step="0.05" value="1.0" class="setting-range" />
+              <input type="range" id="input-terminal-opacity" min="0.2" max="1.0" step="0.05" value="0.70" class="setting-range" />
             </div>
 
             <!-- Desenfoque del fondo (Blur) -->
             <div class="setting-slider-group">
               <div class="setting-slider-header">
                 <span class="slider-label">Desenfoque del fondo (Blur)</span>
-                <span class="slider-value" id="label-terminal-blur">0px</span>
+                <span class="slider-value" id="label-terminal-blur">14px</span>
               </div>
-              <input type="range" id="input-terminal-blur" min="0" max="20" step="1" value="0" class="setting-range" />
+              <input type="range" id="input-terminal-blur" min="0" max="30" step="1" value="14" class="setting-range" />
             </div>
 
             <!-- Imagen de fondo (Wallpaper) -->
@@ -436,9 +439,16 @@
         </div>
       </main>
 
-      <!-- Controladores de Redimensionamiento Manual (Fase 27) -->
+      <!-- Controladores de Redimensionamiento Manual (Fase 27 y Fase 32) -->
+      <div class="resize-handle resize-left" id="resize-left" title="Redimensionar ancho"></div>
       <div class="resize-handle resize-right" id="resize-right" title="Redimensionar ancho"></div>
       <div class="resize-handle resize-bottom" id="resize-bottom" title="Redimensionar alto"></div>
+      <div class="resize-handle resize-corner-left" id="resize-corner-left" title="Redimensionar tamaño">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" class="resize-corner-icon">
+          <line x1="2" y1="2" x2="2" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="2" y1="5.5" x2="4.5" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
       <div class="resize-handle resize-corner" id="resize-corner" title="Redimensionar tamaño">
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" class="resize-corner-icon">
           <line x1="8" y1="2" x2="2" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>

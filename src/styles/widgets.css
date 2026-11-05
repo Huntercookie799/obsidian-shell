@@ -1,0 +1,305 @@
+/* ==========================================================================
+   Mode 1: Notch Pill (At Rest)
+   ========================================================================== */
+.notch-pill {
+  width: 100%;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  background: inherit;
+  overflow: hidden;
+  contain: paint;
+  border-radius: 9999px;
+  z-index: 10;
+}
+
+#island-container.state-glance .notch-pill,
+#island-container.state-expanded .notch-pill {
+  display: none;
+}
+
+.pill-left, .pill-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-orb {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--vayli-accent-primary);
+  box-shadow: 0 0 6px var(--vayli-accent-primary);
+  transition: background 200ms ease, box-shadow 200ms ease;
+}
+
+.status-orb.idle {
+  background: #3F3F46;
+  box-shadow: none;
+}
+
+.status-orb.running {
+  background: var(--vayli-accent-primary);
+  box-shadow: 0 0 8px var(--vayli-accent-primary);
+}
+
+.status-orb.done {
+  background: var(--vayli-status-success);
+  box-shadow: 0 0 8px var(--vayli-status-success);
+}
+
+.status-orb.error {
+  background: var(--vayli-status-error);
+  box-shadow: 0 0 8px var(--vayli-status-error);
+}
+
+.tty-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vayli-text-muted);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.pill-center {
+  flex: 1;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 6px;
+}
+
+.process-name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--vayli-text-primary);
+  opacity: 0.9;
+}
+
+.activity-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--vayli-accent-hover);
+  opacity: 0.6;
+}
+
+/* ==========================================================================
+   Dynamic Pill Modular Widgets
+   ========================================================================== */
+.pill-widget {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.pill-widget.hidden {
+  display: none !important;
+}
+
+.clock-time {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vayli-text-primary);
+  letter-spacing: 0.5px;
+}
+
+.metric-item {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--vayli-text-primary);
+  white-space: nowrap;
+}
+
+.metric-sep {
+  color: var(--vayli-accent-primary);
+  margin: 0 4px;
+  font-weight: bold;
+}
+
+.livelog-proc {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--vayli-accent-primary);
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.livelog-snippet {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--vayli-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   Mode 2: Notch Glance
+   ========================================================================== */
+.notch-glance {
+  display: none;
+  width: 100%;
+  height: 64px;
+  padding: 8px 14px;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  z-index: 10;
+}
+
+#island-container.state-glance .notch-glance {
+  display: flex;
+}
+
+.glance-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.glance-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.glance-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vayli-text-primary);
+}
+
+.glance-status-tag {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #1C1C22;
+  color: var(--vayli-text-muted);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.glance-status-tag.running {
+  background: rgba(var(--accent-rgb), 0.2);
+  color: var(--vayli-accent-primary);
+}
+
+.glance-status-tag.done {
+  background: rgba(16, 185, 129, 0.2);
+  color: var(--vayli-status-success);
+}
+
+.glance-status-tag.error {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--vayli-status-error);
+}
+
+.glance-status-tag.warning {
+  background: rgba(245, 158, 11, 0.2);
+  color: #F59E0B;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.glance-status-tag.success {
+  background: rgba(16, 185, 129, 0.2);
+  color: var(--vayli-status-success);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.glance-top-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.glance-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.glance-actions.hidden,
+.glance-btn.hidden {
+  display: none !important;
+}
+
+.glance-btn {
+  background: #181820;
+  border: 1px solid #30303E;
+  color: #F4F4F6;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 140ms ease;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.glance-btn:hover {
+  background: #252532;
+  border-color: #454558;
+}
+
+.glance-btn-confirm {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: rgba(245, 158, 11, 0.5);
+  color: #FDE68A;
+}
+
+.glance-btn-confirm:hover {
+  background: rgba(245, 158, 11, 0.35);
+  border-color: #F59E0B;
+}
+
+.glance-btn-open {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #FFFFFF;
+}
+
+.glance-btn-open:hover {
+  background: var(--vayli-accent-primary);
+  border-color: var(--vayli-accent-hover);
+  color: #FFFFFF;
+}
+
+.glance-bottom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.glance-prompt-icon {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--vayli-accent-primary);
+  font-weight: bold;
+}
+
+.glance-snippet {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--vayli-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -1,0 +1,24 @@
+:root {
+  --accent-color: #FF6B00;
+  --accent-rgb: 255, 107, 0;
+
+  --terminal-opacity: 0.70;
+  --terminal-bg-blur: 14px;
+  --terminal-bg-image: none;
+
+  --vayli-bg-pill: #080808;
+  --vayli-bg-expanded: rgba(13, 13, 18, 0.70);
+  --vayli-accent-primary: var(--accent-color);
+  --vayli-accent-hover: var(--accent-color);
+  --vayli-accent-glow: rgba(var(--accent-rgb), 0.4);
+  --vayli-text-primary: #F4F4F6;
+  --vayli-text-muted: #8E8E93;
+  --vayli-border-idle: #1F1F24;
+  --vayli-status-success: #10B981;
+  --vayli-status-error: #EF4444;
+  --vayli-selection-bg: rgba(var(--accent-rgb), 0.25);
+  
+  --font-mono: "JetBrains Mono", "Cascadia Code", "Fira Code", monospace;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+}

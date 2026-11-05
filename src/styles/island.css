@@ -1,0 +1,352 @@
+/* ==========================================================================
+   Island Main Container & Dimensional States
+   ========================================================================== */
+#island-container {
+  position: relative;
+  width: 260px;
+  height: 34px;
+  background: var(--vayli-bg-pill);
+  border-radius: 9999px;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.8), 0 0 0 1px var(--vayli-border-idle);
+  display: flex;
+  flex-direction: column;
+  transition: width 260ms var(--ease-spring),
+              height 260ms var(--ease-spring),
+              border-radius 260ms var(--ease-spring),
+              background 260ms var(--ease-spring);
+  transform-origin: top center;
+  z-index: 1000;
+}
+
+/* Collapsed state dimensions */
+#island-container.state-collapsed {
+  width: 260px;
+  height: 34px;
+  border-radius: 9999px;
+  overflow: hidden;
+  contain: paint;
+  background: var(--vayli-bg-pill);
+}
+
+/* Estado expandido y glance: sin contain:paint para que backdrop-filter funcione */
+#island-container.state-glance,
+#island-container.state-expanded {
+  overflow: hidden;
+  contain: none;
+  background: transparent;
+}
+
+/* Glance state dimensions */
+#island-container.state-glance {
+  width: 420px;
+  height: 64px;
+  border-radius: 18px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* Expanded state dimensions */
+#island-container.state-expanded {
+  width: var(--expanded-width, 850px);
+  height: var(--expanded-height, 360px);
+  border-radius: 14px;
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* Capa translúcida del HUD — superficie de fondo desacoplada */
+#island-backdrop {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--vayli-bg-expanded);
+  pointer-events: none;
+  z-index: 0;
+  display: none;
+}
+
+#island-container.state-glance #island-backdrop,
+#island-container.state-expanded #island-backdrop {
+  display: block;
+}
+
+/* Dock Position Transform Origins & Alignments */
+#island-container.dock-top-center {
+  transform-origin: top center;
+}
+
+#island-container.dock-top-left {
+  transform-origin: top left;
+}
+
+#island-container.dock-top-right {
+  transform-origin: top right;
+}
+
+#island-container.dock-vertical-left {
+  transform-origin: center left;
+}
+
+#island-container.dock-vertical-right {
+  transform-origin: center right;
+}
+
+/* Vertical Tab Pill on Left & Right Edges */
+#island-container.state-collapsed.dock-vertical-left {
+  width: 34px;
+  height: 260px;
+  border-radius: 0 17px 17px 0;
+  contain: paint;
+  overflow: hidden;
+}
+
+#island-container.state-collapsed.dock-vertical-right {
+  width: 34px;
+  height: 260px;
+  border-radius: 17px 0 0 17px;
+  contain: paint;
+  overflow: hidden;
+}
+
+/* Glance state on Left & Right Edges */
+#island-container.state-glance.dock-vertical-left {
+  width: 420px;
+  height: 260px;
+  border-radius: 0 20px 20px 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+#island-container.state-glance.dock-vertical-right {
+  width: 420px;
+  height: 260px;
+  border-radius: 20px 0 0 20px;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+#island-container.state-glance.dock-vertical-left .notch-glance,
+#island-container.state-glance.dock-vertical-right .notch-glance {
+  width: 100%;
+  height: 260px;
+  padding: 16px 18px;
+  justify-content: space-between;
+  box-sizing: border-box;
+}
+
+#island-container.state-glance.dock-vertical-left .glance-bottom,
+#island-container.state-glance.dock-vertical-right .glance-bottom {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+}
+
+#island-container.state-glance.dock-vertical-left .glance-snippet,
+#island-container.state-glance.dock-vertical-right .glance-snippet {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  line-height: 1.45;
+  width: 100%;
+}
+
+#island-container.state-collapsed.dock-vertical-left #notch-pill,
+#island-container.state-collapsed.dock-vertical-right #notch-pill {
+  flex-direction: column;
+  width: 34px;
+  height: 260px;
+  min-height: 260px;
+  padding: 12px 0;
+  justify-content: space-between;
+  align-items: center;
+  overflow: hidden;
+  contain: paint;
+}
+
+#island-container.state-collapsed.dock-vertical-left #notch-pill {
+  border-radius: 0 17px 17px 0;
+}
+
+#island-container.state-collapsed.dock-vertical-right #notch-pill {
+  border-radius: 17px 0 0 17px;
+}
+
+#island-container.state-collapsed.dock-vertical-left .pill-left,
+#island-container.state-collapsed.dock-vertical-right .pill-left,
+#island-container.state-collapsed.dock-vertical-left .pill-right,
+#island-container.state-collapsed.dock-vertical-right .pill-right {
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+
+#island-container.state-collapsed.dock-vertical-left .pill-center,
+#island-container.state-collapsed.dock-vertical-right .pill-center {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 0;
+}
+
+#island-container.state-collapsed.dock-vertical-left .pill-widget,
+#island-container.state-collapsed.dock-vertical-right .pill-widget {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Vertical writing mode for texts */
+#island-container.state-collapsed.dock-vertical-left .tty-badge,
+#island-container.state-collapsed.dock-vertical-right .tty-badge,
+#island-container.state-collapsed.dock-vertical-left .process-name,
+#island-container.state-collapsed.dock-vertical-right .process-name,
+#island-container.state-collapsed.dock-vertical-left .clock-time,
+#island-container.state-collapsed.dock-vertical-right .clock-time,
+#island-container.state-collapsed.dock-vertical-left .metric-item,
+#island-container.state-collapsed.dock-vertical-right .metric-item,
+#island-container.state-collapsed.dock-vertical-left .livelog-proc,
+#island-container.state-collapsed.dock-vertical-right .livelog-proc,
+#island-container.state-collapsed.dock-vertical-left .livelog-snippet,
+#island-container.state-collapsed.dock-vertical-right .livelog-snippet {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  letter-spacing: 1px;
+}
+
+/* Left edge: rotate 180deg so text reads naturally from bottom to top */
+#island-container.state-collapsed.dock-vertical-left .tty-badge,
+#island-container.state-collapsed.dock-vertical-left .process-name,
+#island-container.state-collapsed.dock-vertical-left .clock-time,
+#island-container.state-collapsed.dock-vertical-left .metric-item,
+#island-container.state-collapsed.dock-vertical-left .livelog-proc,
+#island-container.state-collapsed.dock-vertical-left .livelog-snippet {
+  transform: rotate(180deg);
+}
+
+/* Right edge: reads from top to bottom */
+#island-container.state-collapsed.dock-vertical-right .tty-badge,
+#island-container.state-collapsed.dock-vertical-right .process-name,
+#island-container.state-collapsed.dock-vertical-right .clock-time,
+#island-container.state-collapsed.dock-vertical-right .metric-item,
+#island-container.state-collapsed.dock-vertical-right .livelog-proc,
+#island-container.state-collapsed.dock-vertical-right .livelog-snippet {
+  transform: none;
+}
+
+#island-container.state-collapsed.dock-vertical-left .metric-sep,
+#island-container.state-collapsed.dock-vertical-right .metric-sep {
+  display: none;
+}
+
+/* Mode 3: Expanded Hub Body */
+#island-hub,
+.notch-body {
+  flex: 1;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+  box-sizing: border-box;
+  z-index: 1;
+}
+
+#island-container.state-expanded .notch-body {
+  display: flex;
+}
+
+/* ==========================================================================
+   Resize Handles (Redimensionamiento Manual Interactivo del HUD)
+   ========================================================================== */
+.resize-handle {
+  position: absolute;
+  z-index: 2500;
+  display: none;
+  user-select: none;
+  transition: background-color 150ms ease, opacity 150ms ease, color 150ms ease;
+  pointer-events: auto;
+}
+
+#island-container.state-expanded .resize-handle {
+  display: flex;
+}
+
+.resize-left {
+  top: 0;
+  left: 0;
+  width: 7px;
+  height: 100%;
+  cursor: ew-resize;
+}
+
+.resize-right {
+  top: 0;
+  right: 0;
+  width: 7px;
+  height: 100%;
+  cursor: ew-resize;
+}
+
+.resize-bottom {
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 7px;
+  cursor: ns-resize;
+}
+
+.resize-corner-left {
+  bottom: 0;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  cursor: sw-resize;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 2px 3px;
+  color: var(--vayli-text-muted);
+  opacity: 0.55;
+}
+
+.resize-corner {
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: se-resize;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 2px 3px;
+  color: var(--vayli-text-muted);
+  opacity: 0.55;
+}
+
+.resize-left:hover,
+.resize-left.active,
+.resize-right:hover,
+.resize-right.active {
+  background: rgba(var(--accent-rgb), 0.35);
+  box-shadow: 0 0 10px var(--vayli-accent-glow);
+}
+
+.resize-bottom:hover,
+.resize-bottom.active {
+  background: rgba(var(--accent-rgb), 0.35);
+  box-shadow: 0 0 10px var(--vayli-accent-glow);
+}
+
+.resize-corner-left:hover,
+.resize-corner-left.active,
+.resize-corner:hover,
+.resize-corner.active {
+  opacity: 1;
+  color: var(--vayli-accent-primary);
+  filter: drop-shadow(0 0 6px var(--vayli-accent-glow));
+}
