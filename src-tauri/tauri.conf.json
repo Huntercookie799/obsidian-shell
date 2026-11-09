@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "ObsidianShell",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "identifier": "com.obsidianshell.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -33,13 +33,33 @@
     "active": true,
     "createUpdaterArtifacts": true,
     "targets": "all",
+    "publisher": "ObsidianShell Team",
+    "copyright": "Copyright © 2026 ObsidianShell. Todos los derechos reservados.",
+    "shortDescription": "Dynamic Island Terminal para Windows",
+    "longDescription": "ObsidianShell - Dynamic Island Terminal de ultra bajo consumo, offline-first y privada por diseño.",
+    "category": "DeveloperTool",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "languages": [
+          "Spanish",
+          "English"
+        ],
+        "displayLanguageSelector": false
+      },
+      "wix": {
+        "language": [
+          "es-ES",
+          "en-US"
+        ]
+      }
+    }
   },
   "plugins": {
     "updater": {

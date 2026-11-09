@@ -26,6 +26,7 @@ export class IslandController {
   private autoCollapseTimer: number | null = null;
   private fullscreenCheckTimer: number | null = null;
   private idleTimer: number | null = null;
+  private modeTransitionTimer: number | null = null;
   private isIdleHidden = false;
   private isMouseDown = false;
   private isMouseOverContainer = false;
@@ -96,6 +97,7 @@ export class IslandController {
 
     // Fullscreen and expanded modes should keep popovers/search bar open
     if (mode !== "expanded" && mode !== "fullscreen") {
+      this.cancelTerminalTransition();
       this.callbacks.closeAllPopovers();
       this.callbacks.closeSearchBar();
     }
@@ -109,11 +111,38 @@ export class IslandController {
     }
 
     if (mode === "expanded" || mode === "fullscreen") {
-      this.callbacks.fitActiveTabPanes(true, true);
+      this.scheduleTerminalFitAfterTransition();
     }
 
     if (this.callbacks.onModeChanged) {
       this.callbacks.onModeChanged(mode);
+    }
+  }
+
+  /**
+   * Bloquea los ajustes de xterm durante la animación CSS de apertura y
+   * ejecuta un único fit al tamaño final. Medir a tamaños intermedios envía
+   * resize_pty en cascada a ConPTY y provoca reflows y corrupción visual.
+   */
+  private scheduleTerminalFitAfterTransition(): void {
+    this.cancelTerminalTransition();
+    this.islandContainer.dataset.modeTransition = "true";
+    this.modeTransitionTimer = window.setTimeout(() => {
+      this.modeTransitionTimer = null;
+      delete this.islandContainer.dataset.modeTransition;
+      if (this.currentMode === "expanded" || this.currentMode === "fullscreen") {
+        this.callbacks.fitActiveTabPanes(false, true);
+      }
+    }, 300);
+  }
+
+  private cancelTerminalTransition(): void {
+    if (this.modeTransitionTimer !== null) {
+      window.clearTimeout(this.modeTransitionTimer);
+      this.modeTransitionTimer = null;
+    }
+    if (this.islandContainer) {
+      delete this.islandContainer.dataset.modeTransition;
     }
   }
 

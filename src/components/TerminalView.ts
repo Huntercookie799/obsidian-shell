@@ -131,10 +131,19 @@ export function fitSafely(
     return;
   }
 
-  // No ejecutar fit si la Dynamic Island no está en modo expandido
+  // No ejecutar fit durante la transición CSS de apertura ni si la isla está oculta.
+  // Medir a tamaños intermedios provoca reflows y resize_pty en cascada sobre ConPTY.
   const island = document.getElementById("island-container");
-  if (island && !island.classList.contains("state-expanded")) {
-    return;
+  if (island) {
+    if (island.dataset.modeTransition === "true") {
+      return;
+    }
+    const isTerminalVisible =
+      island.classList.contains("state-expanded") ||
+      island.classList.contains("state-fullscreen");
+    if (!isTerminalVisible) {
+      return;
+    }
   }
 
   try {
@@ -280,6 +289,8 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
   let isUserScrolledUp = false;
   let pendingOutput = "";
   let rafScheduled = false;
+  let bgTimerScheduled = false;
+  let disposed = false;
 
   // Botón flotante para saltar al final (↓ Final)
   const scrollBottomBtn = document.createElement("button");
@@ -314,7 +325,8 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
   // Vacía y procesa todo el buffer pendiente directamente en Xterm
   const flushOutput = () => {
     rafScheduled = false;
-    if (pendingOutput.length === 0) return;
+    bgTimerScheduled = false;
+    if (disposed || pendingOutput.length === 0) return;
 
     const chunk = pendingOutput;
     pendingOutput = "";
@@ -327,9 +339,11 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
   };
 
   // Renderizado híbrido optimizado:
-  // - En modo expandido/fullscreen: sincronizado con requestAnimationFrame (60 Hz fluido).
-  // - En modo colapsado/glance: NO procesar output en background (ahorra CPU).
-  //   El output se acumula en pendingOutput y se vacía al expandir.
+  // - En modo expandido/fullscreen: requestAnimationFrame (60 Hz fluido).
+  // - En modo colapsado/glance: setTimeout(16ms) para seguir drenando el PTY
+  //   sin renderizar. Evita represar megabytes de output que al expandir se
+  //   volcarían de golpe en un único write, provocando reflows masivos y
+  //   corrupción visual (texto duplicado, cursor desfasado, parpadeos).
   const writeBatched = (data: string) => {
     pendingOutput += data;
 
@@ -342,9 +356,10 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
         rafScheduled = true;
         requestAnimationFrame(flushOutput);
       }
+    } else if (!bgTimerScheduled) {
+      bgTimerScheduled = true;
+      window.setTimeout(flushOutput, 16);
     }
-    // En colapsado/glance: no programar flushOutput continuo.
-    // El buffer se procesará al expandir via flushOutput() en fitActiveTabPanes.
   };
 
   // Restablece el scroll y ancla la terminal directamente al fondo activo
@@ -572,6 +587,8 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
   };
 
   const dispose = () => {
+    disposed = true;
+    pendingOutput = "";
     disableWebgl();
     if (searchAddonInstance) {
       try {

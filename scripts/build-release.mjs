@@ -45,9 +45,17 @@ const buildProc = spawn(cmd, ["tauri", "build"], {
 
 buildProc.on("close", (code) => {
   if (code === 0) {
-    console.log("\x1b[32m[Vayli Release Builder] Production build finished successfully!\x1b[0m");
+    console.log("\x1b[32m[ObsidianShell Release Builder] Production build finished successfully!\x1b[0m");
+    if (process.platform === "win32") {
+      try {
+        console.log("\x1b[38;2;255;107;0m[ObsidianShell Release Builder]\x1b[0m Applying Authenticode digital signature...");
+        execSync('powershell -ExecutionPolicy Bypass -File scripts/sign-windows.ps1', { stdio: "inherit" });
+      } catch (err) {
+        console.warn("[ObsidianShell Release Builder] Warning: Could not sign Windows binaries:", err.message);
+      }
+    }
   } else {
-    console.error(`\x1b[31m[Vayli Release Builder] Build failed with exit code ${code}\x1b[0m`);
+    console.error(`\x1b[31m[ObsidianShell Release Builder] Build failed with exit code ${code}\x1b[0m`);
     process.exit(code || 1);
   }
 });

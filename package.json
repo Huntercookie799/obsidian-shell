@@ -1,7 +1,7 @@
 {
   "name": "obsidian-shell",
   "private": true,
-  "version": "0.12.0",
+  "version": "0.13.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "build:release": "node scripts/build-release.mjs",
+    "sign:windows": "powershell -ExecutionPolicy Bypass -File scripts/sign-windows.ps1",
     "version:patch": "node scripts/bump-version.mjs patch",
     "version:minor": "node scripts/bump-version.mjs minor",
     "version:major": "node scripts/bump-version.mjs major"
