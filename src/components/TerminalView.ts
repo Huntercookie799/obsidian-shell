@@ -188,8 +188,7 @@ export function fitSafely(
       console.error("Error al refrescar o emitir resize-pty:", e);
     }
 
-    // Sincronización estricta de anclaje al fondo para que no quede nada oculto
-    if (!isUserScrolledUp) {
+    if (!isUserScrolledUp && terminal.buffer.active.type !== "alternate") {
       terminal.scrollToBottom();
     }
   } catch (err) {
@@ -224,6 +223,8 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
     selectionInactiveBackground: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15)`,
   };
 
+  const isWindows = navigator.platform.includes("Win");
+
   const terminal = new Terminal({
     theme: dynamicTheme,
     fontFamily: "'JetBrainsMono Nerd Font', 'FiraCode Nerd Font', 'MesloLGS NF', 'Cascadia Code NF', 'Cascadia Mono', 'JetBrains Mono', 'Fira Code', 'DejaVu Sans Mono', 'Ubuntu Mono', monospace",
@@ -234,7 +235,10 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
     cursorStyle: "bar",
     cursorWidth: 2,
     allowTransparency: true,
-    scrollback: 2500,
+    scrollback: 1000,
+    scrollSensitivity: 1,
+    fastScrollSensitivity: 5,
+    windowsPty: isWindows ? { backend: "conpty" } : undefined,
     allowProposedApi: true,
   });
 
@@ -276,12 +280,13 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
 
   terminal.loadAddon(fitAddon);
   terminal.loadAddon(serializeAddon);
-  try {
-    terminal.loadAddon(unicode11Addon);
-    // Activar soporte Unicode 11 para cálculo exacto de ancho de glifos Nerd Fonts y emojis
-    terminal.unicode.activeVersion = "11";
-  } catch (err) {
-    console.debug("[Unicode11] Error al registrar addon Unicode 11:", err);
+  if (!isWindows) {
+    try {
+      terminal.loadAddon(unicode11Addon);
+      terminal.unicode.activeVersion = "11";
+    } catch (err) {
+      console.debug("[Unicode11] Error al registrar addon Unicode 11:", err);
+    }
   }
   terminal.loadAddon(new WebLinksAddon());
 
@@ -314,6 +319,11 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
 
   terminal.onScroll(() => {
     const buf = terminal.buffer.active;
+    if (buf.type === "alternate") {
+      isUserScrolledUp = false;
+      scrollBottomBtn.classList.add("hidden");
+      return;
+    }
     isUserScrolledUp = buf.viewportY < buf.baseY;
     if (isUserScrolledUp) {
       scrollBottomBtn.classList.remove("hidden");
@@ -322,18 +332,29 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
     }
   });
 
-  // Vacía y procesa todo el buffer pendiente directamente en Xterm
+  const MAX_CHARS_PER_FRAME = 65536;
+
   const flushOutput = () => {
     rafScheduled = false;
     bgTimerScheduled = false;
     if (disposed || pendingOutput.length === 0) return;
 
-    const chunk = pendingOutput;
-    pendingOutput = "";
+    let chunk: string;
+    if (pendingOutput.length > MAX_CHARS_PER_FRAME) {
+      chunk = pendingOutput.slice(0, MAX_CHARS_PER_FRAME);
+      pendingOutput = pendingOutput.slice(MAX_CHARS_PER_FRAME);
+    } else {
+      chunk = pendingOutput;
+      pendingOutput = "";
+    }
 
     terminal.write(chunk, () => {
-      if (!isUserScrolledUp) {
+      if (!isUserScrolledUp && terminal.buffer.active.type !== "alternate") {
         terminal.scrollToBottom();
+      }
+      if (!disposed && pendingOutput.length > 0 && !rafScheduled && !bgTimerScheduled) {
+        rafScheduled = true;
+        requestAnimationFrame(flushOutput);
       }
     });
   };
@@ -381,22 +402,16 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
     }
   };
 
-  // Pegado Inteligente Multi-Línea con soporte forzado de Bracketed Paste
   const smartPaste = (rawText: string) => {
     if (!rawText || rawText.length === 0 || !currentSessionId) return;
 
-    // Normalizar saltos de línea Windows \r\n -> \n, \r -> \n para que permanezcan como \n puro
     const normalized = rawText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-    const hasNewlines = normalized.includes("\n");
-    const isBracketed = hasNewlines || Boolean((terminal.modes as any)?.bracketedPasteMode);
+    const isBracketed =
+      normalized.includes("\n") ||
+      normalized.length > 64 ||
+      Boolean((terminal.modes as any)?.bracketedPasteMode);
 
-    let payload: string;
-    if (isBracketed) {
-      // Estrictamente envuelto en las secuencias de escape ANSI de inicio y fin de pegado
-      payload = `\x1b[200~${normalized}\x1b[201~`;
-    } else {
-      payload = normalized;
-    }
+    const payload = isBracketed ? `\x1b[200~${normalized}\x1b[201~` : normalized;
 
     invoke("write_to_pty", { sessionId: currentSessionId, data: payload }).catch((err) => {
       console.error(`[PTY ${currentSessionId}] Error al pegar texto en PTY:`, err);
@@ -425,9 +440,10 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
       return false;
     }
 
-    // Intercept Ctrl+V or Ctrl+Shift+V (Smart Paste)
     if (event.ctrlKey && event.code === "KeyV") {
       if (event.type === "keydown") {
+        event.preventDefault();
+        event.stopPropagation();
         navigator.clipboard.readText().then((text) => {
           if (text) {
             smartPaste(text);
@@ -439,9 +455,10 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
       return false;
     }
 
-    // Intercept Shift+Insert (Atajo clásico de terminal para pegar)
     if (event.shiftKey && event.code === "Insert") {
       if (event.type === "keydown") {
+        event.preventDefault();
+        event.stopPropagation();
         navigator.clipboard.readText().then((text) => {
           if (text) {
             smartPaste(text);
@@ -495,6 +512,7 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
 
   let contextMenuHandler: ((e: MouseEvent) => void) | null = null;
   let pasteHandler: ((e: ClipboardEvent) => void) | null = null;
+  let wheelHandler: ((e: WheelEvent) => void) | null = null;
   let resizeObserver: ResizeObserver | null = null;
   let targetContainer: HTMLElement | null = null;
 
@@ -540,8 +558,6 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
     };
     container.addEventListener("contextmenu", contextMenuHandler);
 
-    // Interceptar evento paste nativo del DOM en fase de captura (capture: true)
-    // para evitar que el navegador envíe caracteres sueltos directamente al socket sin pasar por smartPaste
     pasteHandler = (e: ClipboardEvent) => {
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -551,9 +567,15 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
       }
     };
     container.addEventListener("paste", pasteHandler, true);
-    if (terminal.textarea) {
-      terminal.textarea.addEventListener("paste", pasteHandler, true);
-    }
+
+    wheelHandler = (e: WheelEvent) => {
+      if (terminal.buffer.active.type === "alternate") return;
+      if (e.deltaY < 0 && terminal.buffer.active.baseY > 0) {
+        isUserScrolledUp = true;
+        scrollBottomBtn.classList.remove("hidden");
+      }
+    };
+    container.addEventListener("wheel", wheelHandler, { passive: true });
 
     // Intento de aceleración WebGL inicial con fallback transparente a Canvas/DOM
     enableWebgl();
@@ -615,6 +637,9 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
       }
       if (pasteHandler) {
         targetContainer.removeEventListener("paste", pasteHandler, true);
+      }
+      if (wheelHandler) {
+        targetContainer.removeEventListener("wheel", wheelHandler);
       }
     }
     if (terminal.textarea && pasteHandler) {

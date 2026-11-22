@@ -21,6 +21,7 @@ yarn-error.log*
 
 # Agent & AI Metadata
 .agents/
+.claude/
 AGENTS.md
 
 # Scripts locales privados

@@ -51,18 +51,11 @@ impl PtySession {
 
     pub fn write(&self, data: &[u8]) -> Result<(), String> {
         let mut writer = self.writer.lock();
-        const CHUNK_SIZE: usize = 512;
-        let chunks = data.chunks(CHUNK_SIZE);
-        let total_chunks = chunks.len();
-
-        for (index, chunk) in chunks.enumerate() {
-            writer.write_all(chunk).map_err(|e| format!("Write failed: {}", e))?;
-            writer.flush().map_err(|e| format!("Flush failed: {}", e))?;
-
-            if total_chunks > 1 && index + 1 < total_chunks {
-                std::thread::sleep(std::time::Duration::from_millis(2));
-            }
+        const CHUNK_SIZE: usize = 65536;
+        for chunk in data.chunks(CHUNK_SIZE) {
+            writer.write_all(chunk).map_err(|e| format!("Error al escribir en PTY: {}", e))?;
         }
+        writer.flush().map_err(|e| format!("Error al vaciar buffer PTY: {}", e))?;
         Ok(())
     }
 

@@ -511,6 +511,7 @@
   scrollbar-color: #27272E transparent;
   max-height: 100% !important;
   overflow-y: auto !important;
+  overscroll-behavior: contain;
   box-sizing: border-box !important;
 }
 

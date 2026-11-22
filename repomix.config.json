@@ -1,0 +1,10 @@
+{
+  "ignore": {
+    "useGitignore": true,
+    "useDefaultPatterns": true,
+    "customPatterns": [
+      "src-tauri/gen/**",
+      ".claude/**"
+    ]
+  }
+}

@@ -81,7 +81,7 @@ export class IslandController {
   }
 
   public isExpanded(): boolean {
-    return this.currentMode === "expanded";
+    return this.currentMode === "expanded" || this.currentMode === "fullscreen";
   }
 
   public getActiveCliNotification(): CliNotificationEvent | null {
@@ -183,11 +183,7 @@ export class IslandController {
       this.notificationDismissTimer = null;
     }
 
-    const tabName = notif.title;
-    const cleanTitle = tabName.toLowerCase().includes(notif.title.toLowerCase())
-      ? tabName
-      : `${tabName} • ${notif.title}`;
-    this.glanceTitle.textContent = cleanTitle;
+    this.glanceTitle.textContent = notif.title;
     this.glanceSnippet.textContent = notif.promptSnippet || (notif.type === "eleccion" ? "Confirmación requerida" : "Listo");
     this.glanceStatusTag.textContent = notif.type === "eleccion" ? "CONFIRMACIÓN" : "FINALIZADO";
     this.glanceStatusTag.className = `glance-status-tag ${notif.type === "eleccion" ? "warning" : "success"}`;

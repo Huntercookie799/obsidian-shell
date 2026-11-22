@@ -406,8 +406,8 @@ class VayliIslandApp {
 
     listen<number>("monitor-changed", (event) => {
       const newIdx = event.payload;
+      this.settings.targetMonitorIndex = newIdx;
       stateManager.saveSettings({ targetMonitorIndex: newIdx });
-      // Settings tab will refresh when opened
     });
 
     listen("tray-quit-requested", async () => {
@@ -589,16 +589,21 @@ class VayliIslandApp {
         return;
       }
 
-      if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === "w") {
+      if (e.key === "F11") {
         e.preventDefault();
-        this.tabManager.closeActivePaneOrTab();
+        this.toggleMaximize();
         return;
       }
 
-      if ((e.ctrlKey || e.metaKey) && (e.key === "Tab" || e.code === "Tab")) {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === ",") {
         e.preventDefault();
-        e.stopPropagation();
-        this.tabManager.cycleTab(e.shiftKey ? "prev" : "next");
+        this.toggleSettings();
+        return;
+      }
+
+      if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === "w") {
+        e.preventDefault();
+        this.tabManager.closeActivePaneOrTab();
         return;
       }
     });

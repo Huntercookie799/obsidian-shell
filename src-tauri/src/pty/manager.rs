@@ -311,3 +311,26 @@ impl PtyManager {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_divide_ascii_completo() {
+        let datos = b"hola mundo";
+        assert_eq!(find_incomplete_utf8_split(datos), datos.len());
+    }
+
+    #[test]
+    fn conserva_caracter_utf8_incompleto_al_final() {
+        let completo = "hola ñ".as_bytes();
+        let truncado = &completo[..completo.len() - 1];
+        assert_eq!(find_incomplete_utf8_split(truncado), completo.len() - 2);
+    }
+
+    #[test]
+    fn maneja_buffer_vacio() {
+        assert_eq!(find_incomplete_utf8_split(&[]), 0);
+    }
+}

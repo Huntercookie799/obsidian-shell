@@ -23,8 +23,7 @@ export const CHOICE_REGEX = /(?:\bPermitir\b|\bAllow\b|\bDeny\b|\bRechazar\b|\[Y
 // Patrones heurísticos de indicadores de ejecución activa (si aparecen en las líneas recientes, el agente SIGUE TRABAJANDO)
 export const ACTIVE_EXECUTION_REGEX = /(?:thinking\b|\bthought for\b|\brunning tool\b|\bcalling tool\b|\bexecuting\b|\breading file\b|\bediting\b|\bwriting\b|\bcompiling\b|\bbuilding\b|\bsearching\b|\bfetching\b|\besc to cancel\b|\besc to interrupt\b|\bctrl\+c to interrupt\b|\bin progress\b)/i;
 
-// Patrones heurísticos para detectar prompts listos finales de agentes o shells esperando input de usuario
-export const PROMPT_READY_REGEX = /(?:[❯›$%]\s*$|PS [A-Z]:\\[^\r\n]*>\s*$|[A-Z]:\\[^\r\n]*>\s*$|\? for shortcuts\s*$|\(y\/n\)\s*$)/;
+export const PROMPT_READY_REGEX = /(?:^(?:PS\s+[A-Z]:\\[^\r\n]*>|[A-Z]:\\[^\r\n]*>|[^\r\n]*[❯›]\s*|[^%\r\n]*\$\s*)$|\? for shortcuts\s*$|\(y\/n\)\s*$)/;
 
 /**
  * Reproductor de tonos sutiles mediante Web Audio API puro (sin dependencias ni archivos externos)
@@ -174,14 +173,15 @@ export class CliActivityTracker {
     }, 2000);
   }
 
-  /**
-   * Dispara una alerta directa si el terminal recibe Bell (\x07)
-   */
   public handleBell(onNotification: (event: CliNotificationEvent) => void) {
     const isChoice = CHOICE_REGEX.test(this.tailBuffer);
+    if (!isChoice && !this.hasCommandExecuted) {
+      return;
+    }
     const type: CliNotificationType = isChoice ? "eleccion" : "finalizado";
     const snippet = extractCleanSnippet(this.tailBuffer) || (isChoice ? "¿Deseas continuar?" : "Tarea completada");
 
+    this.hasCommandExecuted = false;
     this.emitNotification(type, snippet, onNotification);
   }
 
@@ -294,16 +294,15 @@ export class CliActivityTracker {
       return;
     }
 
-    // Verificar si la última línea corresponde a un prompt interactivo listo
     if (PROMPT_READY_REGEX.test(lastLine)) {
-      this.hasCommandExecuted = false; // Resetear para esperar el próximo comando del usuario
+      this.hasCommandExecuted = false;
       this.activityStartTime = 0;
-      const snippet = extractCleanSnippet(this.tailBuffer) || "Tarea finalizada con éxito";
+      const nonPromptLines = lines.filter((line) => !PROMPT_READY_REGEX.test(line));
+      const summarySource = nonPromptLines.slice(-2).join("\n");
+      const snippet = extractCleanSnippet(summarySource) || "Tarea finalizada con éxito";
       this.emitNotification("finalizado", snippet, onNotification);
       return;
     }
-
-    this.activityStartTime = 0;
   }
 
   private emitNotification(

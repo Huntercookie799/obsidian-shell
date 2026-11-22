@@ -155,9 +155,9 @@ export class SplitManager {
       cliTracker.onUserInput(data);
     });
 
-    // Setup de listeners PTY
     const outputUnlisten = await listen<string>(`pty-output-${sessionId}`, (event) => {
-      pane.writeBatched(event.payload);
+      const payload = event.payload;
+      pane.writeBatched(payload);
 
       const activeNotif = this.callbacks.getActiveCliNotification();
       if (
@@ -168,17 +168,21 @@ export class SplitManager {
         this.callbacks.onDismissCliNotification(true);
       }
 
-      cliTracker.feedData(event.payload, (notif) => this.callbacks.onCliNotification(notif));
+      const tailForTracker = payload.length > 1024 ? payload.slice(-1024) : payload;
+      cliTracker.feedData(tailForTracker, (notif) => this.callbacks.onCliNotification(notif));
 
       if (!this.callbacks.isExpanded()) {
-        const clean = stripAnsi(event.payload);
+        const tailForSnippet = payload.length > 400 ? payload.slice(-400) : payload;
+        const clean = stripAnsi(tailForSnippet);
         const snippet = extractCleanSnippet(clean, 50);
         if (snippet.length > 0 && snippet !== "Listo") {
           pane.lastSnippet = snippet;
         }
       }
 
-      this.callbacks.onPaneStatusChange(tab, pane, "running");
+      if (pane.status !== "running") {
+        this.callbacks.onPaneStatusChange(tab, pane, "running");
+      }
 
       const prevTimer = this.activityTimers.get(sessionId);
       if (prevTimer) clearTimeout(prevTimer);
@@ -208,13 +212,26 @@ export class SplitManager {
 
   public async splitTab(tab: TerminalTab, layout: "split-vertical" | "split-horizontal"): Promise<TerminalPane | null> {
     if (tab.panes.length >= 4) {
-      return null; // Máximo 4 paneles por pestaña
+      return null;
+    }
+
+    const activePane = tab.panes.find((p) => p.id === tab.activePaneId) || tab.panes[0];
+    let inheritedCwd: string | undefined;
+    const inheritedShellPath = activePane?.shellPath;
+
+    if (activePane?.sessionId) {
+      try {
+        const cwd = await invoke<string | null>("get_session_cwd", { sessionId: activePane.sessionId });
+        if (cwd && cwd.trim().length > 0) {
+          inheritedCwd = cwd;
+        }
+      } catch {}
     }
 
     tab.layout = layout;
     tab.containerElement.className = `tab-panes-container active layout-${layout}`;
 
-    const newPane = await this.addPaneToTab(tab);
+    const newPane = await this.addPaneToTab(tab, inheritedShellPath, inheritedCwd);
     this.fitTabPanes(tab, true);
     this.callbacks.onScheduleAutoSave();
     return newPane;

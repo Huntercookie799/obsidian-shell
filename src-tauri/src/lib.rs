@@ -17,6 +17,36 @@ use window::{switch_monitor, update_island_geometry, IslandState};
 pub use commands::*;
 pub use state::*;
 
+pub fn next_island_state(current: IslandState) -> IslandState {
+    match current {
+        IslandState::Collapsed | IslandState::Glance => IslandState::Expanded,
+        IslandState::Expanded | IslandState::Fullscreen => IslandState::Collapsed,
+    }
+}
+
+fn toggle_island_window(app: &tauri::AppHandle) {
+    window::set_idle_hidden_state(false);
+    let state_holder = app.state::<IslandStateHolder>();
+    let mut current = state_holder.0.lock();
+    let next = next_island_state(*current);
+    *current = next;
+    drop(current);
+
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_skip_taskbar(true);
+        let _ = update_island_geometry(&window, next);
+        if next == IslandState::Expanded {
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+            let _ = window.set_always_on_top(true);
+        } else {
+            let _ = window::handle_fullscreen_visibility(&window, next);
+        }
+        let _ = window.emit("island-state-changed", next);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let pty_manager = PtyManager::new();
@@ -37,28 +67,7 @@ pub fn run() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, _shortcut, event| {
                     if event.state == ShortcutState::Pressed {
-                        window::set_idle_hidden_state(false);
-                        let state_holder = app.state::<IslandStateHolder>();
-                        let mut current = state_holder.0.lock();
-                        let next = match *current {
-                            IslandState::Collapsed | IslandState::Glance => IslandState::Expanded,
-                            IslandState::Expanded | IslandState::Fullscreen => IslandState::Collapsed,
-                        };
-                        *current = next;
-                        drop(current);
-
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = update_island_geometry(&window, next);
-                            if next == IslandState::Expanded {
-                                let _ = window.show();
-                                let _ = window.unminimize();
-                                let _ = window.set_focus();
-                                let _ = window.set_always_on_top(true);
-                            } else {
-                                let _ = window::handle_fullscreen_visibility(&window, next);
-                            }
-                            let _ = window.emit("island-state-changed", next);
-                        }
+                        toggle_island_window(app);
                     }
                 })
                 .build(),
@@ -67,15 +76,27 @@ pub fn run() {
         .manage(state_holder)
         .manage(system_metrics_holder)
         .setup(|app| {
+            let is_autostart = std::env::args().any(|arg| arg == "--autostart");
             if let Some(window) = app.get_webview_window("main") {
-                // Eliminate DWM rectangular shadow on Windows 11 around transparent window
                 let _ = window.set_decorations(false);
                 let _ = window.set_shadow(false);
-                // Initialize window at collapsed notch geometry (260x34 pinned top center)
+                let _ = window.set_skip_taskbar(true);
                 let _ = update_island_geometry(&window, IslandState::Collapsed);
 
-                // Hilo de sondeo ligero para Edge Hover Wakeup (Fase 31)
-                // Intervalo 200ms (5 Hz) para reducir CPU en idle; 80ms era 12.5 Hz
+                let startup_window = window.clone();
+                std::thread::spawn(move || {
+                    let delays = if is_autostart { [1500_u64, 3500_u64] } else { [800_u64, 2000_u64] };
+                    for delay in delays {
+                        std::thread::sleep(std::time::Duration::from_millis(delay));
+                        let _ = startup_window.set_skip_taskbar(true);
+                        if !window::is_idle_hidden() {
+                            let _ = update_island_geometry(&startup_window, IslandState::Collapsed);
+                            let _ = startup_window.show();
+                            let _ = startup_window.set_always_on_top(true);
+                        }
+                    }
+                });
+
                 let window_clone = window.clone();
                 std::thread::spawn(move || {
                     loop {
@@ -91,17 +112,15 @@ pub fn run() {
                 });
             }
 
-            // Register global shortcuts: Alt+Space and CommandOrControl+Backquote as fallback
             let shortcut_manager = app.global_shortcut();
             if let Err(e) = shortcut_manager.register("Alt+Space") {
-                eprintln!("[Vayli] Note: Could not register 'Alt+Space': {}", e);
+                eprintln!("[ObsidianShell] No se pudo registrar 'Alt+Space': {}", e);
             }
             if let Err(e) = shortcut_manager.register("CommandOrControl+Backquote") {
-                eprintln!("[Vayli] Note: Could not register 'CommandOrControl+Backquote': {}", e);
+                eprintln!("[ObsidianShell] No se pudo registrar 'CommandOrControl+Backquote': {}", e);
             }
 
-            // Configure Native System Tray
-            let toggle_item = MenuItem::with_id(app, "toggle", "Mostrar / Ocultar Vayli (Alt+Space)", true, None::<&str>)?;
+            let toggle_item = MenuItem::with_id(app, "toggle", "Mostrar / Ocultar ObsidianShell (Alt+Space)", true, None::<&str>)?;
             let switch_mon_item = MenuItem::with_id(app, "switch_mon", "Cambiar de Monitor", true, None::<&str>)?;
             let center_item = MenuItem::with_id(app, "center", "Centrar Isla", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Salir completamente", true, None::<&str>)?;
@@ -119,28 +138,7 @@ pub fn run() {
                 .on_menu_event(move |app, event| {
                     match event.id.as_ref() {
                         "toggle" => {
-                            window::set_idle_hidden_state(false);
-                            let state_holder = app.state::<IslandStateHolder>();
-                            let mut current = state_holder.0.lock();
-                            let next = match *current {
-                                IslandState::Collapsed | IslandState::Glance => IslandState::Expanded,
-                                IslandState::Expanded | IslandState::Fullscreen => IslandState::Collapsed,
-                            };
-                            *current = next;
-                            drop(current);
-
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = update_island_geometry(&window, next);
-                                if next == IslandState::Expanded {
-                                    let _ = window.show();
-                                    let _ = window.unminimize();
-                                    let _ = window.set_focus();
-                                    let _ = window.set_always_on_top(true);
-                                } else {
-                                    let _ = window::handle_fullscreen_visibility(&window, next);
-                                }
-                                let _ = window.emit("island-state-changed", next);
-                            }
+                            toggle_island_window(app);
                         }
                         "switch_mon" => {
                             let state_holder = app.state::<IslandStateHolder>();
@@ -177,36 +175,17 @@ pub fn run() {
                 })
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
-                        window::set_idle_hidden_state(false);
-                        let app = tray.app_handle();
-                        let state_holder = app.state::<IslandStateHolder>();
-                        let mut current = state_holder.0.lock();
-                        let next = match *current {
-                            IslandState::Collapsed | IslandState::Glance => IslandState::Expanded,
-                            IslandState::Expanded | IslandState::Fullscreen => IslandState::Collapsed,
-                        };
-                        *current = next;
-                        drop(current);
-
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = update_island_geometry(&window, next);
-                            if next == IslandState::Expanded {
-                                let _ = window.show();
-                                let _ = window.unminimize();
-                                let _ = window.set_focus();
-                                let _ = window.set_always_on_top(true);
-                            } else {
-                                let _ = window::handle_fullscreen_visibility(&window, next);
-                            }
-                            let _ = window.emit("island-state-changed", next);
-                        }
+                        toggle_island_window(tray.app_handle());
                     }
                 });
 
-            if let Some(icon) = app.default_window_icon() {
-                let _ = tray_builder.icon(icon.clone()).build(app)?;
+            let tray_result = if let Some(icon) = app.default_window_icon() {
+                tray_builder.icon(icon.clone()).build(app)
             } else {
-                let _ = tray_builder.build(app)?;
+                tray_builder.build(app)
+            };
+            if let Err(e) = tray_result {
+                eprintln!("[ObsidianShell] No se pudo crear el icono en la bandeja: {}", e);
             }
 
             Ok(())
@@ -238,11 +217,35 @@ pub fn run() {
             is_idle_hidden
         ])
         .build(tauri::generate_context!())
-        .expect("error while running tauri application")
+        .expect("error al ejecutar la aplicación tauri")
         .run(move |_app_handle, event| {
             if let tauri::RunEvent::Exit = event {
-                // Clean up all background child processes
                 pty_manager_cleanup.kill_all();
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn alterna_colapsado_a_expandido() {
+        assert_eq!(next_island_state(IslandState::Collapsed), IslandState::Expanded);
+    }
+
+    #[test]
+    fn alterna_vistazo_a_expandido() {
+        assert_eq!(next_island_state(IslandState::Glance), IslandState::Expanded);
+    }
+
+    #[test]
+    fn alterna_expandido_a_colapsado() {
+        assert_eq!(next_island_state(IslandState::Expanded), IslandState::Collapsed);
+    }
+
+    #[test]
+    fn alterna_pantalla_completa_a_colapsado() {
+        assert_eq!(next_island_state(IslandState::Fullscreen), IslandState::Collapsed);
+    }
 }
