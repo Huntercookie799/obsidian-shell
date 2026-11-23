@@ -9,13 +9,15 @@ pub fn set_island_state(
     state: IslandState,
 ) -> Result<(), String> {
     *state_holder.0.lock() = state;
-    update_island_geometry(&window, state)?;
     if state == IslandState::Expanded || state == IslandState::Fullscreen {
+        window::set_idle_hidden_state(false);
         let _ = window.show();
         let _ = window.unminimize();
+        update_island_geometry(&window, state)?;
         let _ = window.set_focus();
         let _ = window.set_always_on_top(true);
     } else {
+        update_island_geometry(&window, state)?;
         let _ = window::handle_fullscreen_visibility(&window, state);
     }
     let _ = window.emit("island-state-changed", state);
@@ -132,14 +134,19 @@ pub fn set_expanded_dimensions(
 }
 
 #[tauri::command]
-pub fn set_idle_hidden(window: WebviewWindow, hidden: bool) -> Result<(), String> {
+pub fn set_idle_hidden(
+    window: WebviewWindow,
+    state_holder: State<IslandStateHolder>,
+    hidden: bool,
+) -> Result<(), String> {
     window::set_idle_hidden_state(hidden);
     if hidden {
         window.hide().map_err(|e| e.to_string())?;
     } else {
+        let current_state = *state_holder.0.lock();
         window.show().map_err(|e| e.to_string())?;
         let _ = window.set_always_on_top(true);
-        let _ = window::update_island_geometry(&window, IslandState::Collapsed);
+        let _ = window::update_island_geometry(&window, current_state);
         let _ = window.emit("edge-hover-wakeup", ());
     }
     Ok(())

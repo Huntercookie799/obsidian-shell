@@ -34,13 +34,14 @@ fn toggle_island_window(app: &tauri::AppHandle) {
 
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.set_skip_taskbar(true);
-        let _ = update_island_geometry(&window, next);
         if next == IslandState::Expanded {
             let _ = window.show();
             let _ = window.unminimize();
+            let _ = update_island_geometry(&window, next);
             let _ = window.set_focus();
             let _ = window.set_always_on_top(true);
         } else {
+            let _ = update_island_geometry(&window, next);
             let _ = window::handle_fullscreen_visibility(&window, next);
         }
         let _ = window.emit("island-state-changed", next);

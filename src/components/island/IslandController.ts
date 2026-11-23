@@ -90,6 +90,12 @@ export class IslandController {
 
   public async setMode(mode: IslandMode, notifyBackend = true): Promise<void> {
     this.currentMode = mode;
+    if (this.isIdleHidden) {
+      this.isIdleHidden = false;
+      if (this.callbacks.onIdleStateChanged) {
+        this.callbacks.onIdleStateChanged(false);
+      }
+    }
     this.resetIdleTimer();
 
     this.islandContainer.classList.remove("state-collapsed", "state-glance", "state-expanded", "state-fullscreen");

@@ -238,7 +238,7 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
     scrollback: 1000,
     scrollSensitivity: 1,
     fastScrollSensitivity: 5,
-    windowsPty: isWindows ? { backend: "conpty" } : undefined,
+    windowsPty: isWindows ? { backend: "conpty", buildNumber: 22621 } : undefined,
     allowProposedApi: true,
   });
 
@@ -280,13 +280,11 @@ export function createTerminalInstance(sessionId: string = "", initialAccent: st
 
   terminal.loadAddon(fitAddon);
   terminal.loadAddon(serializeAddon);
-  if (!isWindows) {
-    try {
-      terminal.loadAddon(unicode11Addon);
-      terminal.unicode.activeVersion = "11";
-    } catch (err) {
-      console.debug("[Unicode11] Error al registrar addon Unicode 11:", err);
-    }
+  try {
+    terminal.loadAddon(unicode11Addon);
+    terminal.unicode.activeVersion = "11";
+  } catch (err) {
+    console.debug("[Unicode11] Error al registrar addon Unicode 11:", err);
   }
   terminal.loadAddon(new WebLinksAddon());
 
