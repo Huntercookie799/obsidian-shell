@@ -15,9 +15,9 @@ jobs:
       matrix:
         include:
           - platform: "windows-latest"
-            args: ""
+            args: "--bundles msi"
           - platform: "ubuntu-22.04"
-            args: ""
+            args: "--bundles deb,appimage"
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -61,3 +61,4 @@ jobs:
           releaseBody: "Automated distribution release for ObsidianShell v__VERSION__."
           releaseDraft: false
           prerelease: false
+          args: ${{ matrix.args }}
